@@ -15,13 +15,9 @@ import mat5 from "./assets/images/dieta-sana-durante-el-embarazo.jpg";
 import mat6 from "./assets/images/nutricionDeportiva.png";
 import facebookIcon from "./assets/images/facebook.png";
 import instagramIcon from "./assets/images/logotipo-de-instagram.png";
+import { API_BASE } from "./config";
 
 const year = new Date().getFullYear();
-
-// URL base del backend
-const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:4000/api";
 
 const materialImages = [mat1, mat2, mat3, mat4, mat5, mat6];
 
@@ -132,7 +128,7 @@ const AnNutritionPage: React.FC = () => {
   useEffect(() => {
     const cargarComentarios = async () => {
       try {
-        const resp = await fetch(`${API_BASE}/comentarios`);
+        const resp = await fetch(`${API_BASE}/api/comentarios`);
         if (!resp.ok) {
           console.error("Error al obtener comentarios:", resp.status);
           return;
@@ -168,7 +164,7 @@ const AnNutritionPage: React.FC = () => {
       try {
         setLoadingServices(true);
         setServicesError(null);
-        const resp = await fetch(`${API_BASE}/servicios?activos=1`);
+        const resp = await fetch(`${API_BASE}/api/servicios?activos=1`);
         if (!resp.ok) {
           throw new Error("No se pudieron cargar los servicios.");
         }
@@ -201,7 +197,7 @@ const AnNutritionPage: React.FC = () => {
       try {
         setLoadingMaterials(true);
         setMaterialsError(null);
-        const resp = await fetch(`${API_BASE}/material`);
+        const resp = await fetch(`${API_BASE}/api/material`);
         if (!resp.ok) {
           throw new Error("No se pudo cargar el material educativo.");
         }

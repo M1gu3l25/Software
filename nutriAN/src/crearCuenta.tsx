@@ -2,8 +2,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import "./styles/crearCuenta.css";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+import { API_BASE } from "./config";
 
 const SignupPage: React.FC = () => {
   const [showPwd, setShowPwd] = useState(false);
@@ -58,7 +57,7 @@ const SignupPage: React.FC = () => {
     try {
       setSubmitting(true);
 
-      const resp = await fetch(`${API_BASE}/auth/register`, {
+      const resp = await fetch(`${API_BASE}/api/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import logoManzana from "./assets/images/manzana.png"; // tu logo
 import "./styles/login.css";
+import { API_BASE } from "./config";
 
 const LoginPage: React.FC = () => {
   const [showPwd, setShowPwd] = useState(false);
@@ -19,7 +20,7 @@ const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:4000/api/auth/login", {
+      const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -7,7 +7,7 @@ const path = require("path");
 
 const pool = require("./db");
 
-// Rutas específicas (admin)
+// Rutas (admin)
 const serviciosRoutes = require("./routes/serviciosRoutes");
 const materialRoutes = require("./routes/materialRoutes");
 
@@ -15,52 +15,79 @@ const materialRoutes = require("./routes/materialRoutes");
 const { getAllMaterial } = require("./controllers/materialController");
 const { getServicios } = require("./controllers/serviciosController");
 
-// Rutas de autenticación (login / register / forgot / reset)
+// Auth routes
 const authRoutes = require("./routes/authRoutes");
 
-// Mailer (Outlook)
+// Mailer (Outlook) (solo se usa dentro de endpoints)
 const { createTransporter } = require("./mail/mailer");
 
 const app = express();
 
 // ===============================
-// MIDDLEWARES GLOBALES
+// CORS (LOCAL + VERCEL)
 // ===============================
-app.use(cors());
-app.use(express.json());
+const FRONTEND_URL = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  FRONTEND_URL,
+].filter(Boolean);
 
-// Servir archivos estáticos (iconos / imágenes subidas)
+app.use(
+  cors({
+    origin: function (origin, cb) {
+      // Permitir requests sin origin (Postman, curl, server-to-server)
+      if (!origin) return cb(null, true);
+
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+
+      return cb(new Error(`CORS bloqueado para origin: ${origin}`));
+    },
+    credentials: true,
+  })
+);
+
+// ===============================
+// MIDDLEWARES
+// ===============================
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// Archivos estáticos
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ===============================
-//  RUTA RAÍZ PARA PROBAR
+// RUTAS BÁSICAS
 // ===============================
 app.get("/", (req, res) => {
-  res.json({ message: "API AnNutricion funcionando" });
+  res.json({ ok: true, message: "API AnNutrition funcionando" });
+});
+
+app.get("/api/health", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT 1 AS ok");
+    res.json({ ok: true, db: rows?.[0]?.ok === 1 });
+  } catch (e) {
+    console.error("Health DB error:", e);
+    res.status(500).json({ ok: false, message: "DB no disponible" });
+  }
 });
 
 // ===============================
-//  AUTH (LOGIN / REGISTER / FORGOT / RESET)
+// AUTH
 // ===============================
 app.use("/api/auth", authRoutes);
 
 /* =====================================================
-   1) AGENDA TU CONSULTA  (tabla: agenda_consulta)
-   + ENVÍA CORREO
+   1) AGENDA TU CONSULTA
    ===================================================== */
-
 app.post("/api/agenda-consulta", async (req, res) => {
   try {
-    const {
-      nombre_completo,
-      correo_electronico,
-      telefono,
-      fecha_preferida,
-      mensaje,
-    } = req.body;
+    const { nombre_completo, correo_electronico, telefono, fecha_preferida, mensaje } = req.body;
 
     if (!nombre_completo || !correo_electronico || !fecha_preferida) {
       return res.status(400).json({
+        ok: false,
         error: "Nombre, correo y fecha preferida son obligatorios",
       });
     }
@@ -69,22 +96,15 @@ app.post("/api/agenda-consulta", async (req, res) => {
       `INSERT INTO agenda_consulta
        (nombre_completo, correo_electronico, telefono, fecha_preferida, mensaje)
        VALUES (?, ?, ?, ?, ?)`,
-      [
-        nombre_completo,
-        correo_electronico,
-        telefono || null,
-        fecha_preferida,
-        mensaje || null,
-      ]
+      [nombre_completo, correo_electronico, telefono || null, fecha_preferida, mensaje || null]
     );
 
-    //Enviar correo (no romper si falla)
+    // Enviar correo (no romper si falla)
     try {
       const transporter = createTransporter();
-
       await transporter.sendMail({
         from: `"AnNutrition Web" <${process.env.MAIL_USER}>`,
-        to: process.env.MAIL_TO || "an.nutricion@outlook.com",
+        to: process.env.MAIL_TO || process.env.MAIL_USER,
         replyTo: correo_electronico,
         subject: "Nueva solicitud de consulta (Web)",
         html: `
@@ -99,25 +119,22 @@ app.post("/api/agenda-consulta", async (req, res) => {
       });
     } catch (mailErr) {
       console.error("⚠️ Error enviando correo (agenda-consulta):", mailErr);
-      // NO devolvemos error, porque la consulta ya se guardó en DB
     }
 
-    res.status(201).json({
+    return res.status(201).json({
+      ok: true,
       message: "Consulta agendada correctamente",
       id: result.insertId,
     });
   } catch (error) {
     console.error("Error al agendar consulta:", error);
-    res.status(500).json({ error: "Error en el servidor" });
+    return res.status(500).json({ ok: false, error: "Error en el servidor" });
   }
 });
 
-// Listar todas las consultas (ASESOR / ADMIN)
 app.get("/api/agenda-consulta", async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      "SELECT * FROM agenda_consulta ORDER BY creado_en DESC"
-    );
+    const [rows] = await pool.query("SELECT * FROM agenda_consulta ORDER BY creado_en DESC");
     res.json(rows);
   } catch (error) {
     console.error("Error al obtener consultas:", error);
@@ -126,14 +143,11 @@ app.get("/api/agenda-consulta", async (req, res) => {
 });
 
 /* =====================================================
-   2) MATERIAL EDUCATIVO (ENDPOINT SIMPLE ANTIGUO, opcional)
+   2) MATERIAL EDUCATIVO (endpoint viejo opcional)
    ===================================================== */
-
 app.get("/api/material-educativo", async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      "SELECT * FROM material_educativo ORDER BY orden ASC, id ASC"
-    );
+    const [rows] = await pool.query("SELECT * FROM material_educativo ORDER BY orden ASC, id ASC");
     res.json(rows);
   } catch (error) {
     console.error("Error al obtener material educativo:", error);
@@ -142,41 +156,32 @@ app.get("/api/material-educativo", async (req, res) => {
 });
 
 /* =====================================================
-   3) COMENTARIOS (tabla: comentarios)
+   3) COMENTARIOS
    ===================================================== */
-
 app.post("/api/comentarios", async (req, res) => {
   try {
     const { nombre, paciente_desde, calificacion, comentario } = req.body;
 
     if (!nombre || !comentario) {
-      return res.status(400).json({
-        error: "Nombre y comentario son obligatorios",
-      });
+      return res.status(400).json({ ok: false, error: "Nombre y comentario son obligatorios" });
     }
 
     const [result] = await pool.query(
-      `INSERT INTO comentarios
-       (nombre, paciente_desde, calificacion, comentario)
+      `INSERT INTO comentarios (nombre, paciente_desde, calificacion, comentario)
        VALUES (?, ?, ?, ?)`,
-      [nombre, paciente_desde || null, calificacion || null, comentario]
+      [nombre, paciente_desde || null, calificacion || 5, comentario]
     );
 
-    res.status(201).json({
-      message: "Comentario registrado correctamente",
-      id: result.insertId,
-    });
+    res.status(201).json({ ok: true, message: "Comentario registrado correctamente", id: result.insertId });
   } catch (error) {
     console.error("Error al crear comentario:", error);
-    res.status(500).json({ error: "Error en el servidor" });
+    res.status(500).json({ ok: false, error: "Error en el servidor" });
   }
 });
 
 app.get("/api/comentarios", async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      "SELECT * FROM comentarios ORDER BY creado_en DESC"
-    );
+    const [rows] = await pool.query("SELECT * FROM comentarios ORDER BY creado_en DESC");
     res.json(rows);
   } catch (error) {
     console.error("Error al obtener comentarios:", error);
@@ -185,34 +190,31 @@ app.get("/api/comentarios", async (req, res) => {
 });
 
 /* =====================================================
-   4) CONTACTO (tabla: contacto_mensajes)
-   + ENVÍA CORREO
+   4) CONTACTO
    ===================================================== */
-
 app.post("/api/contacto", async (req, res) => {
   try {
     const { nombre_completo, correo_electronico, telefono, mensaje } = req.body;
 
     if (!nombre_completo || !correo_electronico || !mensaje) {
       return res.status(400).json({
+        ok: false,
         error: "Nombre completo, correo electrónico y mensaje son obligatorios",
       });
     }
 
     const [result] = await pool.query(
-      `INSERT INTO contacto_mensajes
-       (nombre_completo, correo_electronico, telefono, mensaje)
+      `INSERT INTO contacto_mensajes (nombre_completo, correo_electronico, telefono, mensaje)
        VALUES (?, ?, ?, ?)`,
       [nombre_completo, correo_electronico, telefono || null, mensaje]
     );
 
-    //Enviar correo (no romper si falla)
+    // Enviar correo (no romper si falla)
     try {
       const transporter = createTransporter();
-
       await transporter.sendMail({
         from: `"AnNutrition Web" <${process.env.MAIL_USER}>`,
-        to: process.env.MAIL_TO || "an.nutricion@outlook.com",
+        to: process.env.MAIL_TO || process.env.MAIL_USER,
         replyTo: correo_electronico,
         subject: "Nuevo mensaje de contacto (Web)",
         html: `
@@ -226,24 +228,18 @@ app.post("/api/contacto", async (req, res) => {
       });
     } catch (mailErr) {
       console.error("⚠️ Error enviando correo (contacto):", mailErr);
-      // NO devolvemos error, porque el mensaje ya se guardó en DB
     }
 
-    res.status(201).json({
-      message: "Mensaje enviado correctamente",
-      id: result.insertId,
-    });
+    res.status(201).json({ ok: true, message: "Mensaje enviado correctamente", id: result.insertId });
   } catch (error) {
     console.error("Error al enviar mensaje de contacto:", error);
-    res.status(500).json({ error: "Error en el servidor" });
+    res.status(500).json({ ok: false, error: "Error en el servidor" });
   }
 });
 
 app.get("/api/contacto", async (req, res) => {
   try {
-    const [rows] = await pool.query(
-      "SELECT * FROM contacto_mensajes ORDER BY creado_en DESC"
-    );
+    const [rows] = await pool.query("SELECT * FROM contacto_mensajes ORDER BY creado_en DESC");
     res.json(rows);
   } catch (error) {
     console.error("Error al obtener mensajes de contacto:", error);
@@ -252,30 +248,26 @@ app.get("/api/contacto", async (req, res) => {
 });
 
 /* =====================================================
-   5) SERVICIOS (tabla: servicios)
+   5) SERVICIOS
    ===================================================== */
-
 // CRUD admin
 app.use("/api/admin/servicios", serviciosRoutes);
-
-// ENDPOINT PÚBLICO para usuarios:
-// GET http://localhost:4000/api/servicios?activos=1
+// público
 app.get("/api/servicios", getServicios);
 
 /* =====================================================
-   6) MATERIAL EDUCATIVO (ADMIN + PÚBLICO)
+   6) MATERIAL EDUCATIVO
    ===================================================== */
-
 // CRUD admin
 app.use("/api/admin/material", materialRoutes);
-
-// ENDPOINT público para la página de usuarios
+// público
 app.get("/api/material", getAllMaterial);
 
-/* ==============================
-   INICIAR SERVIDOR
-   ============================== */
+// ==============================
+// INICIAR SERVIDOR
+// ==============================
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`Servidor AnNutricion escuchando en http://localhost:${PORT}`);
+  console.log(`Servidor AnNutrition escuchando en http://localhost:${PORT}`);
+  if (allowedOrigins.length) console.log("CORS allowed:", allowedOrigins);
 });
