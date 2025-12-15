@@ -1,7 +1,7 @@
-// src/principal.tsx
+// src/AnNutritionPage.tsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import "./styles/style.css";
+import "./styles/stylePage.css";
 import logoManzana from "./assets/images/manzana.png";
 import heroImg from "./assets/images/definicion-de-nutricion-y-dietetica.jpg";
 import equipoImg from "./assets/images/AnNutricion (2).jpeg";
@@ -20,16 +20,10 @@ const year = new Date().getFullYear();
 
 // URL base del backend
 const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:4000/api";
-
-// Para construir URLs absolutas del servidor (uploads)
-const SERVER_BASE = API_BASE.replace(/\/api$/, "");
+  import.meta.env.VITE_API_URL?.replace(/\/$/, "") ||
+  "http://localhost:4000/api";
 
 const materialImages = [mat1, mat2, mat3, mat4, mat5, mat6];
-
-// cuántas tarjetas por “vista” en el carrusel
-const SERVICES_PER_PAGE = 3;
-const MATERIALS_PER_PAGE = 3;
 
 /** ==== TIPOS ====  */
 type MaterialInfo = {
@@ -44,14 +38,10 @@ type MaterialInfo = {
 
 type MaterialItem = {
   id: number;
-  categoria_texto: string;
+  categoria: string;
   emoji_categoria: string;
   titulo: string;
   descripcion: string;
-  boton_texto: string;
-  imagen_url?: string | null;
-  orden: number;
-  activo: number;
 };
 
 type Servicio = {
@@ -77,18 +67,21 @@ type Testimonial = {
   calificacion: number;
 };
 
-const Principal: React.FC = () => {
+const AnNutritionPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // ====== LOGOUT ======
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/login");
+  // ====== HELPER PARA BLOQUEAR ACCIONES SI NO HAY LOGIN ======
+  const showLoginMessage = () => {
+    alert("Por favor inicie sesión");
   };
 
-  // ====== ESTADO PARA EL PANEL "AGENDAR CONSULTA" ======
-  const [openConsulta, setOpenConsulta] = useState(false);
+  const handleBlockedSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    showLoginMessage();
+  };
+
+  // ====== ESTADO PARA EL PANEL "AGENDAR CONSULTA" (modal no se abre en visitante) ======
+  const [openConsulta] = useState(false);
   const [consultaForm, setConsultaForm] = useState({
     nombre: "",
     correo: "",
@@ -97,10 +90,9 @@ const Principal: React.FC = () => {
     mensaje: "",
   });
 
-  // ====== ESTADO PARA EL PANEL DE "MATERIAL EDUCATIVO" ======
-  const [openMaterial, setOpenMaterial] = useState(false);
-  const [materialSeleccionado, setMaterialSeleccionado] =
-    useState<MaterialInfo | null>(null);
+  // ====== ESTADO PARA EL PANEL DE "MATERIAL EDUCATIVO" (solo visual, no se abre) ======
+  const [openMaterial] = useState(false);
+  const [materialSeleccionado] = useState<MaterialInfo | null>(null);
 
   // ====== ESTADO PARA TESTIMONIOS (USUARIOS) ======
   const [testimonios, setTestimonios] = useState<Testimonial[]>([]);
@@ -122,10 +114,6 @@ const Principal: React.FC = () => {
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
 
-  // ====== ESTADO PÁGINA DE CARRUSEL ======
-  const [servicePage, setServicePage] = useState(0);
-  const [materialPage, setMaterialPage] = useState(0);
-
   // ====== ESTADO CONTACTO ======
   const [contactoForm, setContactoForm] = useState({
     nombre: "",
@@ -134,7 +122,13 @@ const Principal: React.FC = () => {
     mensaje: "",
   });
 
-  // ====== CARGAS INICIALES ======
+  // ====== ESTADO CARRUSEL (SERVICIOS / MATERIAL) ======
+  const [servicePage, setServicePage] = useState(0);
+  const [materialPage, setMaterialPage] = useState(0);
+  const [servicesPerPage, setServicesPerPage] = useState(3);
+  const [materialsPerPage, setMaterialsPerPage] = useState(3);
+
+  // ====== CARGAS INICIALES (solo GET, son visuales) ======
   useEffect(() => {
     const cargarComentarios = async () => {
       try {
@@ -174,7 +168,6 @@ const Principal: React.FC = () => {
       try {
         setLoadingServices(true);
         setServicesError(null);
-        // Solo servicios activos
         const resp = await fetch(`${API_BASE}/servicios?activos=1`);
         if (!resp.ok) {
           throw new Error("No se pudieron cargar los servicios.");
@@ -215,14 +208,10 @@ const Principal: React.FC = () => {
         const data = await resp.json();
         const adaptados: MaterialItem[] = data.map((item: any) => ({
           id: item.id,
-          categoria_texto: item.categoria_texto ?? item.categoria ?? "",
+          categoria: item.categoria,
           emoji_categoria: item.emoji_categoria ?? "📘",
           titulo: item.titulo,
-          descripcion: item.descripcion ?? "",
-          boton_texto: item.boton_texto ?? "Más información",
-          imagen_url: item.imagen_url || null,
-          orden: item.orden ?? 1,
-          activo: item.activo ?? 1,
+          descripcion: item.descripcion,
         }));
         setMaterials(adaptados);
       } catch (err: any) {
@@ -241,54 +230,33 @@ const Principal: React.FC = () => {
     void loadMaterials();
   }, []);
 
-  // Resetear página de carrusel si cambia el número de elementos
+  // ====== RESPONSIVE: CUÁNTAS TARJETAS POR PÁGINA (DESKTOP 3, MÓVIL 1) ======
+  useEffect(() => {
+    const updatePerPage = () => {
+      if (window.innerWidth < 768) {
+        setServicesPerPage(1);
+        setMaterialsPerPage(1);
+      } else {
+        setServicesPerPage(3);
+        setMaterialsPerPage(3);
+      }
+    };
+
+    updatePerPage();
+    window.addEventListener("resize", updatePerPage);
+    return () => window.removeEventListener("resize", updatePerPage);
+  }, []);
+
+  // Si cambian los datos o el tamaño, regresamos a la primera página
   useEffect(() => {
     setServicePage(0);
-  }, [services.length]);
+  }, [services.length, servicesPerPage]);
 
   useEffect(() => {
     setMaterialPage(0);
-  }, [materials.length]);
+  }, [materials.length, materialsPerPage]);
 
-  // ====== DERIVADOS DEL CARRUSEL ======
-  const totalServicePages =
-    services.length === 0 ? 1 : Math.ceil(services.length / SERVICES_PER_PAGE);
-  const totalMaterialPages =
-    materials.length === 0
-      ? 1
-      : Math.ceil(materials.length / MATERIALS_PER_PAGE);
-
-  const visibleServices = services.slice(
-    servicePage * SERVICES_PER_PAGE,
-    servicePage * SERVICES_PER_PAGE + SERVICES_PER_PAGE
-  );
-
-  const visibleMaterials = materials.slice(
-    materialPage * MATERIALS_PER_PAGE,
-    materialPage * MATERIALS_PER_PAGE + MATERIALS_PER_PAGE
-  );
-
-  const handlePrevServices = () => {
-    setServicePage((prev) => (prev > 0 ? prev - 1 : prev));
-  };
-
-  const handleNextServices = () => {
-    setServicePage((prev) =>
-      prev < totalServicePages - 1 ? prev + 1 : prev
-    );
-  };
-
-  const handlePrevMaterials = () => {
-    setMaterialPage((prev) => (prev > 0 ? prev - 1 : prev));
-  };
-
-  const handleNextMaterials = () => {
-    setMaterialPage((prev) =>
-      prev < totalMaterialPages - 1 ? prev + 1 : prev
-    );
-  };
-
-  // ====== HANDLERS: CONSULTA ======
+  // ====== HANDLERS (SOLO PARA CONTROLAR INPUTS, SIN ENVIAR NADA) ======
   const handleConsultaChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -299,56 +267,6 @@ const Principal: React.FC = () => {
     }));
   };
 
-  const handleConsultaSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      const respuesta = await fetch(`${API_BASE}/agenda-consulta`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          nombre_completo: consultaForm.nombre,
-          correo_electronico: consultaForm.correo,
-          telefono: consultaForm.telefono,
-          fecha_preferida: consultaForm.fecha,
-          mensaje: consultaForm.mensaje,
-        }),
-      });
-
-      if (!respuesta.ok) {
-        console.error("Error en la respuesta:", respuesta.status);
-        alert("Ocurrió un error al agendar tu consulta. Intenta más tarde.");
-        return;
-      }
-
-      const data = await respuesta.json();
-      console.log("Respuesta del servidor:", data);
-
-      alert("Tu consulta ha sido agendada correctamente. ¡Gracias! 😊");
-
-      setOpenConsulta(false);
-      setConsultaForm({
-        nombre: "",
-        correo: "",
-        telefono: "",
-        fecha: "",
-        mensaje: "",
-      });
-    } catch (error) {
-      console.error("Error al conectar con el backend:", error);
-      alert("No se pudo conectar con el servidor. Verifica que esté encendido.");
-    }
-  };
-
-  // Abrir panel de material
-  const abrirMaterial = (info: MaterialInfo) => {
-    setMaterialSeleccionado(info);
-    setOpenMaterial(true);
-  };
-
-  // ====== HANDLERS: TESTIMONIOS ======
   const handleTestimonioChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
@@ -361,74 +279,6 @@ const Principal: React.FC = () => {
     }));
   };
 
-  const handleTestimonioSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!nuevoTestimonio.nombre.trim() || !nuevoTestimonio.comentario.trim()) {
-      alert("Por favor completa tu nombre y tu comentario.");
-      return;
-    }
-
-    const partes = nuevoTestimonio.nombre.trim().split(" ");
-    const iniciales = partes
-      .filter((p) => p.length > 0)
-      .slice(0, 2)
-      .map((p) => p[0].toUpperCase())
-      .join("");
-
-    const payload = {
-      nombre: nuevoTestimonio.nombre.trim(),
-      paciente_desde: nuevoTestimonio.desde || `${year}`,
-      calificacion: nuevoTestimonio.calificacion,
-      comentario: nuevoTestimonio.comentario.trim(),
-    };
-
-    try {
-      const resp = await fetch(`${API_BASE}/comentarios`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!resp.ok) {
-        console.error("Error al guardar comentario:", resp.status);
-        alert("Ocurrió un error al enviar tu comentario. Intenta más tarde.");
-        return;
-      }
-
-      const data = await resp.json();
-
-      const nuevo: Testimonial = {
-        id: data.id,
-        nombre: payload.nombre,
-        iniciales: iniciales || "US",
-        desde: payload.paciente_desde,
-        comentario: payload.comentario,
-        calificacion: payload.calificacion,
-      };
-
-      setTestimonios((prev) => [nuevo, ...prev]);
-
-      setNuevoTestimonio({
-        nombre: "",
-        desde: `${year}`,
-        comentario: "",
-        calificacion: 5,
-      });
-
-      alert("¡Gracias por compartir tu experiencia! 😊");
-    } catch (error) {
-      console.error(
-        "Error al conectar con el backend (guardar comentario):",
-        error
-      );
-      alert("No se pudo conectar con el servidor. Verifica que esté encendido.");
-    }
-  };
-
-  // ====== HANDLERS: CONTACTO ======
   const handleContactoChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -439,54 +289,19 @@ const Principal: React.FC = () => {
     }));
   };
 
-  const handleContactoSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // ====== DERIVADOS DEL CARRUSEL ======
+  const totalServicePages =
+    services.length > 0 ? Math.ceil(services.length / servicesPerPage) : 1;
+  const totalMaterialPages =
+    materials.length > 0 ? Math.ceil(materials.length / materialsPerPage) : 1;
 
-    if (
-      !contactoForm.nombre.trim() ||
-      !contactoForm.correo.trim() ||
-      !contactoForm.mensaje.trim()
-    ) {
-      alert("Por favor completa tu nombre, correo y mensaje.");
-      return;
-    }
+  const serviceStart = servicePage * servicesPerPage;
+  const serviceEnd = serviceStart + servicesPerPage;
+  const servicesToShow = services.slice(serviceStart, serviceEnd);
 
-    try {
-      const resp = await fetch(`${API_BASE}/contacto`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          nombre_completo: contactoForm.nombre,
-          correo_electronico: contactoForm.correo,
-          telefono: contactoForm.telefono,
-          mensaje: contactoForm.mensaje,
-        }),
-      });
-
-      if (!resp.ok) {
-        console.error("Error al enviar mensaje de contacto:", resp.status);
-        alert("Ocurrió un error al enviar tu mensaje. Intenta más tarde.");
-        return;
-      }
-
-      const data = await resp.json();
-      console.log("Contacto guardado:", data);
-
-      alert("¡Gracias por escribirnos! Hemos recibido tu mensaje.");
-
-      setContactoForm({
-        nombre: "",
-        correo: "",
-        telefono: "",
-        mensaje: "",
-      });
-    } catch (error) {
-      console.error("Error al conectar con el backend (contacto):", error);
-      alert("No se pudo conectar con el servidor. Verifica que esté encendido.");
-    }
-  };
+  const materialStart = materialPage * materialsPerPage;
+  const materialEnd = materialStart + materialsPerPage;
+  const materialsToShow = materials.slice(materialStart, materialEnd);
 
   return (
     <div lang="es">
@@ -519,8 +334,12 @@ const Principal: React.FC = () => {
             <a href="#contacto">Contacto</a>
           </li>
         </ul>
-        <button type="button" className="btn-outline" onClick={handleLogout}>
-          Cerrar sesión
+        <button
+          className="btn-primary"
+          type="button"
+          onClick={() => navigate("/login")}
+        >
+          Iniciar sesión
         </button>
       </nav>
 
@@ -536,7 +355,7 @@ const Principal: React.FC = () => {
             <button
               className="btn-primary"
               type="button"
-              onClick={() => setOpenConsulta(true)}
+              onClick={showLoginMessage}
             >
               Agenda tu consulta
             </button>
@@ -561,20 +380,17 @@ const Principal: React.FC = () => {
         </div>
       </section>
 
-      {/* ===== MODAL / PANEL DE AGENDAR CONSULTA ===== */}
+      {/* ===== MODAL / PANEL DE AGENDAR CONSULTA (no se abre en visitante) ===== */}
       {openConsulta && (
-        <div
-          className="consulta-overlay"
-          onClick={() => setOpenConsulta(false)}
-        >
-          <div className="consulta-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="consulta-overlay">
+          <div className="consulta-modal">
             <h2 className="consulta-title">Agendar consulta</h2>
             <p className="consulta-subtitle">
               Completa tus datos y nos pondremos en contacto para confirmar tu
               cita.
             </p>
 
-            <form className="consulta-form" onSubmit={handleConsultaSubmit}>
+            <form className="consulta-form" onSubmit={handleBlockedSubmit}>
               <label>
                 Nombre completo
                 <input
@@ -636,7 +452,7 @@ const Principal: React.FC = () => {
               <button
                 type="button"
                 className="consulta-close"
-                onClick={() => setOpenConsulta(false)}
+                onClick={showLoginMessage}
               >
                 Cerrar
               </button>
@@ -792,13 +608,12 @@ const Principal: React.FC = () => {
               <button
                 className="btn-outline full"
                 type="button"
-                onClick={() => navigate("/asesora")}
+                onClick={showLoginMessage}
               >
                 Ver perfil completo
               </button>
             </div>
           </article>
-
           <article className="card card--advisor">
             <img src={asesor2} alt="M.N.D. Noé Toribio Trujillo" />
             <div className="card__body">
@@ -808,7 +623,7 @@ const Principal: React.FC = () => {
               <button
                 className="btn-outline full"
                 type="button"
-                onClick={() => navigate("/asesor")}
+                onClick={showLoginMessage}
               >
                 Ver perfil completo
               </button>
@@ -824,64 +639,93 @@ const Principal: React.FC = () => {
           Soluciones nutricionales integrales para cada necesidad
         </p>
 
-        {loadingServices && <p className="muted">Cargando servicios…</p>}
-        {servicesError && <p className="error">{servicesError}</p>}
-        {!loadingServices && !servicesError && services.length === 0 && (
-          <p className="muted">
-            Pronto añadiremos nuestros servicios en esta sección.
-          </p>
-        )}
+        <div className="carousel-section">
+          {loadingServices && <p className="muted">Cargando servicios…</p>}
+          {servicesError && <p className="error">{servicesError}</p>}
+          {!loadingServices && !servicesError && services.length === 0 && (
+            <p className="muted">
+              Pronto añadiremos nuestros servicios en esta sección.
+            </p>
+          )}
 
-        {!loadingServices && !servicesError && services.length > 0 && (
-          <div className="carousel">
-            <button
-              className="carousel-btn carousel-btn--left"
-              onClick={handlePrevServices}
-              disabled={servicePage === 0}
-              type="button"
-            >
-              ‹
-            </button>
+          {!loadingServices && !servicesError && services.length > 0 && (
+            <>
+              <div className="cards carousel-cards">
+                {servicesToShow.map((srv) => (
+                  <article className="card" key={srv.id}>
+                    <div className="card__icon badge--round">
+                      {srv.icono_tipo === "emoji"
+                        ? srv.icono_emoji || "📅"
+                        : "🖼"}
+                    </div>
+                    <h3 className="card__title">{srv.titulo}</h3>
+                    <p className="accent">{srv.precio_texto}</p>
+                    <ul className="list-check">
+                      {srv.punto1 && <li>{srv.punto1}</li>}
+                      {srv.punto2 && <li>{srv.punto2}</li>}
+                      {srv.punto3 && <li>{srv.punto3}</li>}
+                    </ul>
+                    <button
+                      className="btn-primary full"
+                      type="button"
+                      onClick={showLoginMessage}
+                    >
+                      Más información
+                    </button>
+                  </article>
+                ))}
+              </div>
 
-            <div className="carousel-track">
-              {visibleServices.map((srv) => (
-                <article className="card" key={srv.id}>
-                  <div className="card__icon badge--round">
-                    {srv.icono_tipo === "emoji"
-                      ? srv.icono_emoji || "📅"
-                      : "🖼"}
+              {totalServicePages > 1 && (
+                <div className="carousel-controls">
+                  <div className="carousel-arrows">
+                    <button
+                      type="button"
+                      className="carousel-btn"
+                      onClick={() =>
+                        setServicePage((prev) =>
+                          prev === 0 ? prev : prev - 1
+                        )
+                      }
+                      disabled={servicePage === 0}
+                      aria-label="Servicios anteriores"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="carousel-btn"
+                      onClick={() =>
+                        setServicePage((prev) =>
+                          prev === totalServicePages - 1 ? prev : prev + 1
+                        )
+                      }
+                      disabled={servicePage === totalServicePages - 1}
+                      aria-label="Servicios siguientes"
+                    >
+                      ›
+                    </button>
                   </div>
-                  <h3 className="card__title">{srv.titulo}</h3>
-                  <p className="accent">{srv.precio_texto}</p>
-                  <ul className="list-check">
-                    {srv.punto1 && <li>{srv.punto1}</li>}
-                    {srv.punto2 && <li>{srv.punto2}</li>}
-                    {srv.punto3 && <li>{srv.punto3}</li>}
-                  </ul>
-                  <button
-                    className="btn-primary full"
-                    type="button"
-                    onClick={() => {
-                      const contacto = document.getElementById("contacto");
-                      contacto?.scrollIntoView({ behavior: "smooth" });
-                    }}
-                  >
-                    Más información
-                  </button>
-                </article>
-              ))}
-            </div>
 
-            <button
-              className="carousel-btn carousel-btn--right"
-              onClick={handleNextServices}
-              disabled={servicePage === totalServicePages - 1}
-              type="button"
-            >
-              ›
-            </button>
-          </div>
-        )}
+                  <div className="carousel-dots">
+                    {Array.from({ length: totalServicePages }).map((_, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={
+                          "carousel-dot" +
+                          (idx === servicePage ? " carousel-dot--active" : "")
+                        }
+                        onClick={() => setServicePage(idx)}
+                        aria-label={`Ir a página ${idx + 1} de servicios`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </section>
 
       {/* ===== MATERIAL EDUCATIVO (DINÁMICO + CARRUSEL) ===== */}
@@ -891,90 +735,113 @@ const Principal: React.FC = () => {
           Aprende más sobre nutrición y bienestar
         </p>
 
-        {loadingMaterials && <p className="muted">Cargando material…</p>}
-        {materialsError && <p className="error">{materialsError}</p>}
-        {!loadingMaterials && !materialsError && materials.length === 0 && (
-          <p className="muted">
-            Pronto añadiremos material educativo en esta sección.
-          </p>
-        )}
+        <div className="carousel-section">
+          {loadingMaterials && <p className="muted">Cargando material…</p>}
+          {materialsError && <p className="error">{materialsError}</p>}
+          {!loadingMaterials && !materialsError && materials.length === 0 && (
+            <p className="muted">
+              Pronto añadiremos material educativo en esta sección.
+            </p>
+          )}
 
-        {!loadingMaterials && !materialsError && materials.length > 0 && (
-          <div className="carousel">
-            <button
-              className="carousel-btn carousel-btn--left"
-              onClick={handlePrevMaterials}
-              disabled={materialPage === 0}
-              type="button"
-            >
-              ‹
-            </button>
+          {!loadingMaterials && !materialsError && materials.length > 0 && (
+            <>
+              <div className="cards carousel-cards">
+                {materialsToShow.map((mat, index) => {
+                  const imgSrc =
+                    materialImages[index % materialImages.length] ||
+                    materialImages[0];
 
-            <div className="carousel-track">
-              {visibleMaterials.map((mat, index) => {
-                const imgSrc = mat.imagen_url
-                  ? `${SERVER_BASE}${mat.imagen_url}` //sin hardcode localhost
-                  : materialImages[index % materialImages.length];
+                  const textoCorto =
+                    mat.descripcion && mat.descripcion.length > 140
+                      ? mat.descripcion.slice(0, 137) + "..."
+                      : mat.descripcion;
 
-                const textoCorto =
-                  mat.descripcion && mat.descripcion.length > 140
-                    ? mat.descripcion.slice(0, 137) + "..."
-                    : mat.descripcion;
+                  return (
+                    <article
+                      className="card card--material"
+                      key={mat.id ?? `${mat.titulo}-${index}`}
+                    >
+                      <img src={imgSrc} alt={mat.titulo} />
+                      <div className="card__body">
+                        <span className="muted small">
+                          {mat.emoji_categoria} {mat.categoria}
+                        </span>
+                        <h3 className="card__title">{mat.titulo}</h3>
+                        <p className="muted">{textoCorto}</p>
+                        <button
+                          className="btn-outline full"
+                          type="button"
+                          onClick={showLoginMessage}
+                        >
+                          Más información
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
 
-                return (
-                  <article
-                    className="card card--material"
-                    key={mat.id ?? `${mat.titulo}-${index}`}
-                  >
-                    <img src={imgSrc} alt={mat.titulo} />
-                    <div className="card__body">
-                      <span className="muted small">
-                        {mat.emoji_categoria} {mat.categoria_texto}
-                      </span>
-                      <h3 className="card__title">{mat.titulo}</h3>
-                      <p className="muted">{textoCorto}</p>
-                      <button
-                        className="btn-outline full"
-                        type="button"
-                        onClick={() =>
-                          abrirMaterial({
-                            categoria: mat.categoria_texto,
-                            emoji: mat.emoji_categoria,
-                            titulo: mat.titulo,
-                            descripcion: mat.descripcion,
-                          })
-                        }
-                      >
-                        {mat.boton_texto || "Más información"}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+              {totalMaterialPages > 1 && (
+                <div className="carousel-controls">
+                  <div className="carousel-arrows">
+                    <button
+                      type="button"
+                      className="carousel-btn"
+                      onClick={() =>
+                        setMaterialPage((prev) =>
+                          prev === 0 ? prev : prev - 1
+                        )
+                      }
+                      disabled={materialPage === 0}
+                      aria-label="Material anterior"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="carousel-btn"
+                      onClick={() =>
+                        setMaterialPage((prev) =>
+                          prev === totalMaterialPages - 1 ? prev : prev + 1
+                        )
+                      }
+                      disabled={materialPage === totalMaterialPages - 1}
+                      aria-label="Material siguiente"
+                    >
+                      ›
+                    </button>
+                  </div>
 
-            <button
-              className="carousel-btn carousel-btn--right"
-              onClick={handleNextMaterials}
-              disabled={materialPage === totalMaterialPages - 1}
-              type="button"
-            >
-              ›
-            </button>
-          </div>
-        )}
+                  <div className="carousel-dots">
+                    {Array.from({ length: totalMaterialPages }).map(
+                      (_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className={
+                            "carousel-dot" +
+                            (idx === materialPage
+                              ? " carousel-dot--active"
+                              : "")
+                          }
+                          onClick={() => setMaterialPage(idx)}
+                          aria-label={`Ir a página ${idx + 1} de material`}
+                        />
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </section>
 
-      {/* ===== PANEL / MODAL PARA MATERIAL EDUCATIVO ===== */}
+      {/* ===== PANEL / MODAL PARA MATERIAL EDUCATIVO (no se abre en visitante) ===== */}
       {openMaterial && materialSeleccionado && (
-        <div
-          className="consulta-overlay"
-          onClick={() => setOpenMaterial(false)}
-        >
-          <div
-            className="consulta-modal material-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="consulta-overlay">
+          <div className="consulta-modal material-modal">
             <header className="material-modal__header material-modal__header--simple">
               <span className="material-panel-chip">
                 <span className="material-panel-chip-emoji">
@@ -995,7 +862,7 @@ const Principal: React.FC = () => {
             <button
               type="button"
               className="consulta-close material-modal__close"
-              onClick={() => setOpenMaterial(false)}
+              onClick={showLoginMessage}
             >
               Cerrar
             </button>
@@ -1008,9 +875,9 @@ const Principal: React.FC = () => {
         <h2 className="section-title">Lo que dicen nuestros pacientes</h2>
         <p className="section-subtitle">Historias reales de transformación</p>
 
-        {/* FORMULARIO PARA QUE EL USUARIO AGREGUE SU OPINIÓN */}
+        {/* FORMULARIO PARA QUE EL USUARIO AGREGUE SU OPINIÓN (bloqueado) */}
         <div className="testimonial-form-wrapper">
-          <form className="testimonial-form" onSubmit={handleTestimonioSubmit}>
+          <form className="testimonial-form" onSubmit={handleBlockedSubmit}>
             <h3>Comparte tu experiencia</h3>
             <p className="muted small">
               Tu opinión ayuda a otras personas a animarse a cuidar su salud.
@@ -1075,7 +942,7 @@ const Principal: React.FC = () => {
           </form>
         </div>
 
-        {/* LISTA DE TESTIMONIOS */}
+        {/* LISTA DE TESTIMONIOS (visual) */}
         <div className="cards cards--grid-3">
           {testimonios.map((t) => (
             <article key={t.id} className="card card--testimonial">
@@ -1104,8 +971,8 @@ const Principal: React.FC = () => {
         </p>
 
         <div className="contacto__grid">
-          {/* ===== FORMULARIO ===== */}
-          <form className="form" onSubmit={handleContactoSubmit}>
+          {/* ===== FORMULARIO (bloqueado) ===== */}
+          <form className="form" onSubmit={handleBlockedSubmit}>
             <label>Nombre completo</label>
             <input
               type="text"
@@ -1167,7 +1034,9 @@ const Principal: React.FC = () => {
               <div className="info-ico">📞</div>
               <div>
                 <h4>Teléfono</h4>
-                <p className="muted">727 100 1860</p>
+                <p className="muted">
+                  727 100 1860
+                </p>
               </div>
             </div>
 
@@ -1175,10 +1044,13 @@ const Principal: React.FC = () => {
               <div className="info-ico">✉️</div>
               <div>
                 <h4>Email</h4>
-                <p className="muted">an.nutricion@outlook.com</p>
+                <p className="muted">
+                 an.nutricion@outlook.com
+                </p>
               </div>
             </div>
 
+            {/* ===== NUEVO BLOQUE HORARIO ===== */}
             <div className="info-box">
               <div className="info-ico">⏰</div>
               <div>
@@ -1193,17 +1065,12 @@ const Principal: React.FC = () => {
               </div>
             </div>
 
+            {/* ===== MAPA ===== */}
             <div className="mapa-box">
-              <iframe
-                title="Mapa de ubicación"
-                width="100%"
-                height="350"
-                style={{ border: 0, borderRadius: "20px" }}
-                loading="lazy"
-                allowFullScreen
-                referrerPolicy="no-referrer-when-downgrade"
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3761.6325783393313!2d-99.488084!3d18.365117!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x85cf100178e333dd%3A0x3e0efa5bb529d590!2sAv.%2030%20de%20Abril%2064%2C%20Centro%2C%20Buenavista%20de%20Cu%C3%A9llar%2C%20Gro.%2040330!5e0!3m2!1ses!2smx!4v1701234567890"
-              ></iframe>
+              <div className="mapa-placeholder">
+                <div className="mapa-icon">📍</div>
+                <p>Mapa de ubicación</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1214,7 +1081,11 @@ const Principal: React.FC = () => {
         <div className="footer__grid">
           <div>
             <div className="brand">
-              <img src={logoManzana} alt="AnNutrition" className="nav__icon" />
+              <img
+                src={logoManzana}
+                alt="AnNutrition"
+                className="nav__icon"
+              />
               <strong>AnNutrition</strong>
             </div>
             <p className="muted">Planes nutricionales personalizados.</p>
@@ -1243,12 +1114,12 @@ const Principal: React.FC = () => {
             <h4>Contacto</h4>
             <ul className="footer__links">
               <li>
-                <a href="mailto:an.nutricion@outlook.com">
+                <a href="mailto:contacto@nutrisystem.com">
                   an.nutricion@outlook.com
                 </a>
               </li>
               <li>
-                <a href="tel:+527271001860">7271001860</a>
+                <a href="tel:+525551234567">7271001860</a>
               </li>
             </ul>
             <div className="social">
@@ -1279,4 +1150,4 @@ const Principal: React.FC = () => {
   );
 };
 
-export default Principal;
+export default AnNutritionPage;

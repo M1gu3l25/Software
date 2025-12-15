@@ -1,11 +1,57 @@
+// src/login.tsx
 import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import logoManzana from "./assets/images/manzana.png"; // tu logo
 import "./styles/login.css";
 
-
-// Si usas TypeScript, añade el .d.ts del lottie más abajo
 const LoginPage: React.FC = () => {
   const [showPwd, setShowPwd] = useState(false);
+  const [email, setEmail] = useState("admin@nutrian.com"); // solo de ejemplo
+  const [password, setPassword] = useState("Admin123!");   // solo de ejemplo
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const res = await fetch("http://localhost:4000/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.message || "Error al iniciar sesión");
+      }
+
+      const data = await res.json();
+
+      // Guardar token y datos del usuario
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+
+      // Redirigir según el rol
+      if (data.user.role === "admin") {
+        console.log("➡ Navegando a /admin");
+        navigate("/admin");
+      } else {
+        console.log("➡ Navegando a /principal");
+        navigate("/principal");
+      }
+    } catch (err: any) {
+      setError(err.message || "Error desconocido");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <section className="auth auth--split">
@@ -42,9 +88,15 @@ const LoginPage: React.FC = () => {
           <h1 className="auth__title">Iniciar sesión</h1>
           <p className="auth__subtitle">Usa tu correo y contraseña</p>
 
-          <form className="form" onSubmit={(e) => e.preventDefault()}>
+          <form className="form" onSubmit={handleSubmit}>
             <label>Correo electrónico</label>
-            <input type="email" placeholder="tu@email.com" required />
+            <input
+              type="email"
+              placeholder="tu@email.com"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
 
             <label>Contraseña</label>
             <div className="input-with-action">
@@ -52,39 +104,48 @@ const LoginPage: React.FC = () => {
                 type={showPwd ? "text" : "password"}
                 placeholder="********"
                 required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
               <button
-  type="button"
-  className="chip-action"
-  onClick={() => setShowPwd((v) => !v)}
-  aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
-  title={showPwd ? "Ocultar" : "Mostrar"}
->
-  {showPwd ? (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#0589c8" viewBox="0 0 24 24">
-      <path d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 
-      5-5 5 2.24 5 5-2.24 5-5 5z"/>
-      <circle cx="12" cy="12" r="2.5"/>
-      <line x1="2" y1="2" x2="22" y2="22" stroke="#0589c8" strokeWidth="2"/>
-    </svg>
-  ) : (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#0589c8" viewBox="0 0 24 24">
-      <path d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 
-      5-5 5 2.24 5 5-2.24 5-5 5z"/>
-      <circle cx="12" cy="12" r="2.5"/>
-    </svg>
-  )}
-</button>
+                type="button"
+                className="chip-action"
+                onClick={() => setShowPwd((v) => !v)}
+                aria-label={showPwd ? "Ocultar contraseña" : "Mostrar contraseña"}
+                title={showPwd ? "Ocultar" : "Mostrar"}
+              >
+                {showPwd ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#0589c8" viewBox="0 0 24 24">
+                    <path d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 
+                    5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                    <circle cx="12" cy="12" r="2.5"/>
+                    <line x1="2" y1="2" x2="22" y2="22" stroke="#0589c8" strokeWidth="2"/>
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#0589c8" viewBox="0 0 24 24">
+                    <path d="M12 5c-7 0-11 7-11 7s4 7 11 7 11-7 11-7-4-7-11-7zm0 12c-2.76 0-5-2.24-5-5s2.24-5 
+                    5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                    <circle cx="12" cy="12" r="2.5"/>
+                  </svg>
+                )}
+              </button>
             </div>
 
             <div className="auth__row">
               <label className="chk">
                 <input type="checkbox" /> <span>Recuérdame</span>
               </label>
-              <a className="link" href="#reset">¿Olvidaste tu contraseña?</a>
+              {/*aquí usamos React Router */}
+              <Link className="link" to="/olvido">
+                ¿Olvidaste tu contraseña?
+              </Link>
             </div>
 
-            <button className="btn-primary full" type="submit">Entrar</button>
+            {error && <p className="auth-error">{error}</p>}
+
+            <button className="btn-primary full" type="submit" disabled={loading}>
+              {loading ? "Ingresando..." : "Entrar"}
+            </button>
 
             <div className="auth__divider"><span>ó</span></div>
 
@@ -93,8 +154,11 @@ const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          <p className="muted center small" style={{marginTop:12}}>
-            ¿No tienes cuenta? <a className="link" href="#signup">Crear cuenta</a>
+          <p className="muted center small" style={{ marginTop: 12 }}>
+            ¿No tienes cuenta?{" "}
+            <Link className="link" to="/crear-cuenta">
+              Crear cuenta
+            </Link>
           </p>
         </div>
 

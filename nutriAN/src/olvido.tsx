@@ -1,5 +1,10 @@
-import { useState } from "react";
+// src/olvido.tsx
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import "./styles/olvido.css";
+
+// Puedes centralizar esto en un archivo de config si quieres
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 const ForgotPasswordPage: React.FC = () => {
   const [email, setEmail] = useState("");
@@ -10,7 +15,7 @@ const ForgotPasswordPage: React.FC = () => {
   const isValidEmail = (v: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
@@ -18,22 +23,57 @@ const ForgotPasswordPage: React.FC = () => {
       setError("Ingresa un correo válido.");
       return;
     }
-    // Simulación UI
-    setSending(true);
-    setTimeout(() => {
+
+    try {
+      setSending(true);
+
+      const resp = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok) {
+        // Si el backend devuelve mensaje de error, lo mostramos
+        setError(
+          data?.message ||
+            data?.error ||
+            "No pudimos enviar el correo. Inténtalo de nuevo."
+        );
+        setSent(false);
+      } else {
+        // Aunque el correo no exista, el backend responde ok=true por seguridad
+        setSent(true);
+      }
+    } catch (err) {
+      console.error("Error en forgot-password:", err);
+      setError("Ocurrió un error al conectar con el servidor.");
+      setSent(false);
+    } finally {
       setSending(false);
-      setSent(true);
-      // setError("No pudimos enviar el correo. Inténtalo de nuevo."); // ejemplo de error
-    }, 1200);
+    }
   };
 
   return (
     <section className="auth auth--center">
-      <div className="auth__card" role="dialog" aria-labelledby="fp-title" aria-modal="true">
+      <div
+        className="auth__card"
+        role="dialog"
+        aria-labelledby="fp-title"
+        aria-modal="true"
+      >
         <div className="auth__header">
           <div className="auth__lottie sm">
             <lottie-player
-              src={sent ? "/iconosAnimados/Success.json" : "/iconosAnimados/olvidar.json"}
+              src={
+                sent
+                  ? "/iconosAnimados/Success.json"
+                  : "/iconosAnimados/olvidar.json"
+              }
               background="transparent"
               speed="1"
               loop={!sent}
@@ -70,12 +110,18 @@ const ForgotPasswordPage: React.FC = () => {
               </p>
             )}
 
-            <button className="btn-primary full" type="submit" disabled={sending}>
+            <button
+              className="btn-primary full"
+              type="submit"
+              disabled={sending}
+            >
               {sending ? "Enviando..." : "Enviar enlace"}
             </button>
 
             <div className="auth__row center" style={{ marginTop: 10 }}>
-              <a className="link" href="#/login">Volver a iniciar sesión</a>
+              <Link className="link" to="/login">
+                Volver a iniciar sesión
+              </Link>
             </div>
           </form>
         ) : (
@@ -84,8 +130,17 @@ const ForgotPasswordPage: React.FC = () => {
               Si no ves el correo, revisa tu carpeta de spam o promociones.
             </div>
             <div className="actions">
-              <a className="btn-outline" href="#/login">Volver al login</a>
-              <button className="btn-primary" onClick={() => { setSent(false); setEmail(""); }}>
+              <Link className="btn-outline" to="/login">
+                Volver al login
+              </Link>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  setSent(false);
+                  setEmail("");
+                  setError(null);
+                }}
+              >
                 Enviar a otro correo
               </button>
             </div>
@@ -94,7 +149,8 @@ const ForgotPasswordPage: React.FC = () => {
       </div>
 
       <footer className="auth__footer">
-        © {new Date().getFullYear()} AnNutrition · Todos los derechos reservados
+        © {new Date().getFullYear()} AnNutrition · Todos los derechos
+        reservados
       </footer>
     </section>
   );

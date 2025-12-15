@@ -1,5 +1,9 @@
-import { useState } from "react";
+// src/crearCuenta.tsx
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import "./styles/crearCuenta.css";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 const SignupPage: React.FC = () => {
   const [showPwd, setShowPwd] = useState(false);
@@ -10,14 +14,90 @@ const SignupPage: React.FC = () => {
   const [pwd2, setPwd2] = useState("");
   const [agree, setAgree] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const navigate = useNavigate();
 
   const strength = getStrength(pwd);
   const pwdMatch = pwd && pwd2 && pwd === pwd2;
 
-  const onSubmit = (e: React.FormEvent) => {
+  const isValidEmail = (v: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSubmitting(true);
-    setTimeout(() => setSubmitting(false), 900); // Simulación visual
+    setError(null);
+    setSuccessMsg(null);
+
+    if (!name.trim()) {
+      setError("El nombre es obligatorio.");
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      setError("Ingresa un correo electrónico válido.");
+      return;
+    }
+
+    if (!pwd || !pwd2) {
+      setError("Debes ingresar y confirmar tu contraseña.");
+      return;
+    }
+
+    if (!pwdMatch) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    if (!agree) {
+      setError("Debes aceptar los Términos y Condiciones.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const resp = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          nombre: name,
+          email,
+          password: pwd,
+        }),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok || data.ok === false) {
+        setError(
+          data?.message ||
+            data?.error ||
+            "No se pudo crear la cuenta. Inténtalo de nuevo."
+        );
+        return;
+      }
+
+      // data: { ok, message, user, token }
+      if (data.token && data.user) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+      }
+
+      setSuccessMsg("Cuenta creada correctamente. Redirigiendo...");
+      // Pequeño delay para que el usuario vea el mensaje
+      setTimeout(() => {
+        navigate("/principal"); // nuevos usuarios van al panel de usuarios
+      }, 900);
+    } catch (err) {
+      console.error("Error en registro:", err);
+      setError("Ocurrió un error al conectar con el servidor.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -186,12 +266,24 @@ const SignupPage: React.FC = () => {
               />
               <span>
                 Acepto los{" "}
-                <a className="link" href="#/terminos">
+                <Link className="link" to="/terminos">
                   Términos y Condiciones
-                </a>
+                </Link>
               </span>
             </label>
           </div>
+
+          {/* Mensajes de error / éxito */}
+          {error && (
+            <p className="form-error" role="alert" style={{ marginTop: 8 }}>
+              {error}
+            </p>
+          )}
+          {successMsg && (
+            <p className="form-success" style={{ marginTop: 8 }}>
+              {successMsg}
+            </p>
+          )}
 
           {/* ===== BOTÓN ===== */}
           <button
@@ -204,16 +296,17 @@ const SignupPage: React.FC = () => {
 
           <p className="muted center small" style={{ marginTop: 12 }}>
             ¿Ya tienes cuenta?{" "}
-            <a className="link" href="#/login">
+            <Link className="link" to="/login">
               Inicia sesión
-            </a>
+            </Link>
           </p>
         </form>
       </div>
 
       {/* ===== FOOTER ===== */}
       <footer className="auth__footer">
-        © {new Date().getFullYear()} AnNutrition · Todos los derechos reservados
+        © {new Date().getFullYear()} AnNutrition · Todos los derechos
+        reservados
       </footer>
     </section>
   );
