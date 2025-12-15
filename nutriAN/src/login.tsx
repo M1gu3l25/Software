@@ -6,8 +6,8 @@ import "./styles/login.css";
 
 const LoginPage: React.FC = () => {
   const [showPwd, setShowPwd] = useState(false);
-  const [email, setEmail] = useState("admin@nutrian.com"); // solo de ejemplo
-  const [password, setPassword] = useState("Admin123!");   // solo de ejemplo
+  const [email, setEmail] = useState(""); // solo de ejemplo
+  const [password, setPassword] = useState("");   // solo de ejemplo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
