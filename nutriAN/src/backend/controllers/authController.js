@@ -6,8 +6,8 @@ const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 
-// ✅ Ajuste: tu mailer real (según lo que mostraste) es src/backend/mailer.js
-const { createTransporter } = require("../mailer");
+// ✅ Ruta REAL: src/backend/mail/mailer.js
+const { createTransporter } = require("../mail/mailer");
 
 // =====================
 // CONFIG
@@ -93,10 +93,7 @@ async function register(req, res) {
       return res.status(400).json({ message: "Nombre, email y contraseña son obligatorios" });
     }
 
-    const [exists] = await pool.query(
-      "SELECT id FROM usuarios WHERE email = ? LIMIT 1",
-      [email]
-    );
+    const [exists] = await pool.query("SELECT id FROM usuarios WHERE email = ? LIMIT 1", [email]);
 
     if (exists.length > 0) {
       return res.status(409).json({ message: "Ya existe una cuenta con ese correo" });
@@ -162,10 +159,9 @@ async function forgotPassword(req, res) {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ message: "El correo es obligatorio" });
 
-    const [users] = await pool.query(
-      "SELECT id, nombre FROM usuarios WHERE email = ? LIMIT 1",
-      [email]
-    );
+    const [users] = await pool.query("SELECT id, nombre FROM usuarios WHERE email = ? LIMIT 1", [
+      email,
+    ]);
 
     // Respuesta neutra por seguridad
     if (users.length === 0) {
@@ -174,7 +170,7 @@ async function forgotPassword(req, res) {
       });
     }
 
-    // ✅ Verifica configuración de correo (evita 500 si falta algo en Railway)
+    // Verifica configuración de correo (evita 500 si falta algo en Railway)
     const canMail =
       process.env.MAIL_HOST &&
       process.env.MAIL_PORT &&
@@ -183,8 +179,7 @@ async function forgotPassword(req, res) {
 
     if (!canMail) {
       return res.status(500).json({
-        message:
-          "Falta configurar MAIL_HOST/MAIL_PORT/MAIL_USER/MAIL_PASS en el servidor",
+        message: "Falta configurar MAIL_HOST/MAIL_PORT/MAIL_USER/MAIL_PASS en el servidor",
       });
     }
 
@@ -192,8 +187,6 @@ async function forgotPassword(req, res) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
 
-    // ✅ OJO: esto requiere tabla password_resets
-    // Si NO tienes esa tabla, comenta este bloque y dime para darte el SQL.
     await pool.query(
       `INSERT INTO password_resets (user_id, token, expires_at, usado, creado_en)
        VALUES (?, ?, ?, 0, NOW())`,
@@ -255,10 +248,7 @@ async function resetPassword(req, res) {
 
     const hash = await bcrypt.hash(password, 10);
 
-    await pool.query("UPDATE usuarios SET password = ? WHERE id = ?", [
-      hash,
-      reset.user_id,
-    ]);
+    await pool.query("UPDATE usuarios SET password = ? WHERE id = ?", [hash, reset.user_id]);
 
     await pool.query("UPDATE password_resets SET usado = 1 WHERE id = ?", [reset.id]);
 
