@@ -1,67 +1,55 @@
+// src/backend/index.js
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
-const dotenv = require("dotenv");
 
-dotenv.config();
+const authRoutes = require("./routes/auth");
+const serviciosRoutes = require("./routes/servicios");
+const comentariosRoutes = require("./routes/comentarios");
+const materialRoutes = require("./routes/material");
 
 const app = express();
 
-/* =====================
-   CORS (CRÍTICO)
-===================== */
+// =====================
+// CORS (CLARO Y SEGURO)
+// =====================
 const FRONTEND_URL = process.env.FRONTEND_URL;
+
+if (!FRONTEND_URL) {
+  console.error("❌ FRONTEND_URL no está definido");
+  process.exit(1);
+}
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Permitir llamadas sin origin (Postman, curl, healthchecks)
-      if (!origin) return callback(null, true);
-
-      if (origin === FRONTEND_URL) {
-        return callback(null, true);
-      }
-
-      console.error("❌ CORS bloqueado:", origin);
-      return callback(new Error("CORS no permitido"));
-    },
+    origin: FRONTEND_URL,
     credentials: true,
   })
 );
 
-/* =====================
-   PARSERS
-===================== */
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-/* =====================
-   HEALTHCHECK
-===================== */
-app.get("/", (req, res) => {
+// =====================
+// HEALTH CHECK
+// =====================
+app.get("/api/health", (req, res) => {
   res.json({ message: "API AnNutrition funcionando" });
 });
 
-/* =====================
-   ROUTES
-===================== */
-app.use("/api/auth", require("./routes/authRoutes"));
-app.use("/api/material", require("./routes/materialRoutes"));
-app.use("/api/servicios", require("./routes/serviciosRoutes"));
-app.use("/api/comentarios", require("./routes/comentariosRoutes"));
+// =====================
+// ROUTES
+// =====================
+app.use("/api/auth", authRoutes);
+app.use("/api/servicios", serviciosRoutes);
+app.use("/api/comentarios", comentariosRoutes);
+app.use("/api/material", materialRoutes);
 
-/* =====================
-   ERROR HANDLER (OBLIGATORIO)
-===================== */
-app.use((err, req, res, next) => {
-  console.error("🔥 ERROR GLOBAL:", err.message);
-  res.status(500).json({ message: "Error interno del servidor" });
-});
+// =====================
+// START SERVER (CLAVE)
+// =====================
+const PORT = process.env.PORT; // 🚨 NO valor por defecto
 
-/* =====================
-   SERVER
-===================== */
-const PORT = process.env.PORT || 4000;
-
-app.listen(PORT, () => {
-  console.log(`🚀 Backend corriendo en puerto ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`✅ Backend corriendo en puerto ${PORT}`);
 });
