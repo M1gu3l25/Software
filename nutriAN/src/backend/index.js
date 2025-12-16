@@ -13,6 +13,10 @@ const materialRoutes = require("./routes/materialRoutes");
 const serviciosRoutes = require("./routes/serviciosRoutes");
 const comentariosRoutes = require("./routes/comentariosRoutes");
 
+// ✅ NUEVAS RUTAS
+const agendaRoutes = require("./routes/agendaRoutes");
+const contactoRoutes = require("./routes/contactoRoutes");
+
 const app = express();
 
 // =====================
@@ -70,6 +74,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/material", materialRoutes);
 app.use("/api/servicios", serviciosRoutes);
 app.use("/api/comentarios", comentariosRoutes);
+
+// ✅ NUEVAS RUTAS (para principal.tsx)
+app.use("/api/agenda-consulta", agendaRoutes);
+app.use("/api/contacto", contactoRoutes);
 
 // =====================
 // 404 handler

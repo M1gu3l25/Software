@@ -16,8 +16,26 @@ import mat6 from "./assets/images/nutricionDeportiva.png";
 import facebookIcon from "./assets/images/facebook.png";
 import instagramIcon from "./assets/images/logotipo-de-instagram.png";
 
-import { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+// ✅ Fix TS: permite usar <lottie-player> en TSX
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      "lottie-player": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement>,
+        HTMLElement
+      > & {
+        src?: string;
+        background?: string;
+        speed?: string | number;
+        loop?: boolean;
+        autoplay?: boolean;
+      };
+    }
+  }
+}
 
 const year = new Date().getFullYear();
 
@@ -67,12 +85,18 @@ type Testimonial = {
   calificacion: number;
 };
 
-// ====== URL BASE DEL BACKEND ======
-const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") ||
-  "http://localhost:4000/api";
+// Base del servidor (sin /api)
+const SERVER_BASE =
+  (import.meta.env.VITE_API_URL as string)?.replace(/\/$/, "") ||
+  "http://localhost:4000";
+
+// Base de la API (con /api)
+const API_BASE = `${SERVER_BASE}/api`;
 
 const materialImages = [mat1, mat2, mat3, mat4, mat5, mat6];
+
+const SERVICES_PER_PAGE = 3;
+const MATERIALS_PER_PAGE = 3;
 
 const PrincipalAdmin: React.FC = () => {
   const navigate = useNavigate();
@@ -82,7 +106,7 @@ const PrincipalAdmin: React.FC = () => {
   const [openServicesEditor, setOpenServicesEditor] = useState(false);
   const [openMaterialEditor, setOpenMaterialEditor] = useState(false);
 
-  // ===== QUIÉNES SOMOS =====
+  // ===== QUIÉNES SOMOS (SOLO UI, NO BD) =====
   const [aboutBlocks, setAboutBlocks] = useState<AboutBlock[]>([]);
   const [loadingAbout, setLoadingAbout] = useState(false);
   const [savingAbout, setSavingAbout] = useState(false);
@@ -115,72 +139,25 @@ const PrincipalAdmin: React.FC = () => {
   };
 
   // ==========================
-  //   CARGA: QUIÉNES SOMOS
+  //   QUIÉNES SOMOS (UI ONLY)
   // ==========================
   const loadAboutBlocks = async () => {
-    try {
-      setLoadingAbout(true);
-      setAboutError(null);
+    // ✅ No existe endpoint en tu backend. Deja bloques vacíos o algunos por defecto si quieres.
+    setLoadingAbout(true);
+    setAboutError(null);
 
-      const res = await fetch(`${API_BASE}/admin/about`);
-      if (!res.ok) throw new Error("Error al cargar información.");
+    // Puedes precargar algo si quieres (opcional)
+    setAboutBlocks((prev) => prev);
 
-      const data = await res.json();
-      setAboutBlocks(
-        data.map((b: any) => ({
-          id: b.id,
-          titulo: b.titulo,
-          descripcion: b.descripcion,
-          iconoTipo: b.icono_tipo === "imagen" ? "imagen" : "emoji",
-          iconoEmoji: b.icono_emoji || "🍏",
-          orden: b.orden,
-        }))
-      );
-    } catch (err: any) {
-      setAboutError(err.message);
-    } finally {
-      setLoadingAbout(false);
-    }
+    setLoadingAbout(false);
   };
 
   const handleSaveAboutBlocks = async () => {
+    // ✅ No existe endpoint en tu backend. Guardado visual (no truena).
     try {
       setSavingAbout(true);
-      for (let i = 0; i < aboutBlocks.length; i++) {
-        const block = aboutBlocks[i];
-        const orden = i + 1;
-
-        const payload = {
-          titulo: block.titulo,
-          descripcion: block.descripcion,
-          icono_tipo: block.iconoTipo,
-          icono_emoji: block.iconoEmoji,
-          orden,
-          activo: 1,
-        };
-
-        if (block.id) {
-          await fetch(`${API_BASE}/admin/about/${block.id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-        } else {
-          const res = await fetch(`${API_BASE}/admin/about`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          const data = await res.json();
-          block.id = data.id;
-        }
-      }
-
-      await loadAboutBlocks();
       setOpenEditor(false);
-      alert("Información guardada correctamente");
-    } catch (err) {
-      alert("Error guardando información");
+      alert("Cambios guardados (solo visual).");
     } finally {
       setSavingAbout(false);
     }
@@ -192,29 +169,33 @@ const PrincipalAdmin: React.FC = () => {
   const loadServices = async () => {
     try {
       setLoadingServices(true);
-      const res = await fetch(`${API_BASE}/admin/servicios`);
+      setServicesError(null);
+
+      // ✅ CORREGIDO: /api/servicios
+      const res = await fetch(`${API_BASE}/servicios`);
       if (!res.ok) throw new Error("No se pudieron cargar los servicios.");
 
       const data = await res.json();
       setServices(
-        data.map((srv: any) => ({
+        (data || []).map((srv: any) => ({
           id: srv.id,
-          titulo: srv.titulo,
-          precio_texto: srv.precio_texto,
-          punto1: srv.punto1,
-          punto2: srv.punto2,
-          punto3: srv.punto3,
-          icono_tipo: srv.icono_tipo,
-          icono_emoji: srv.icono_emoji,
-          icono_imagen: srv.icono_imagen,
-          orden: srv.orden,
-          activo: srv.activo,
+          titulo: srv.titulo ?? "",
+          precio_texto: srv.precio_texto ?? "",
+          punto1: srv.punto1 ?? "",
+          punto2: srv.punto2 ?? "",
+          punto3: srv.punto3 ?? "",
+          icono_tipo: srv.icono_tipo === "imagen" ? "imagen" : "emoji",
+          icono_emoji: srv.icono_emoji ?? "📅",
+          icono_imagen: srv.icono_imagen ?? null,
+          orden: Number(srv.orden ?? 1),
+          activo: Number(srv.activo ?? 1),
         }))
       );
 
       setServicePage(0);
-    } catch (err) {
-      setServicesError("Error al cargar servicios.");
+    } catch (err: any) {
+      console.error(err);
+      setServicesError(err?.message || "Error al cargar servicios.");
     } finally {
       setLoadingServices(false);
     }
@@ -242,17 +223,21 @@ const PrincipalAdmin: React.FC = () => {
         };
 
         if (srv.id) {
-          await fetch(`${API_BASE}/admin/servicios/${srv.id}`, {
+          // ✅ CORREGIDO: /api/servicios/:id
+          const r = await fetch(`${API_BASE}/servicios/${srv.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
+          if (!r.ok) throw new Error("No se pudo actualizar un servicio.");
         } else {
-          await fetch(`${API_BASE}/admin/servicios`, {
+          // ✅ CORREGIDO: /api/servicios
+          const r = await fetch(`${API_BASE}/servicios`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
+          if (!r.ok) throw new Error("No se pudo crear un servicio.");
         }
       }
 
@@ -260,6 +245,7 @@ const PrincipalAdmin: React.FC = () => {
       setOpenServicesEditor(false);
       alert("Servicios guardados.");
     } catch (err) {
+      console.error(err);
       alert("Error guardando servicios.");
     } finally {
       setSavingServices(false);
@@ -272,27 +258,32 @@ const PrincipalAdmin: React.FC = () => {
   const loadMaterials = async () => {
     try {
       setLoadingMaterials(true);
-      const res = await fetch(`${API_BASE}/admin/material`);
+      setMaterialsError(null);
+
+      // ✅ CORREGIDO: /api/material
+      const res = await fetch(`${API_BASE}/material`);
       if (!res.ok) throw new Error("No se pudo cargar el material.");
 
       const data = await res.json();
       setMaterials(
-        data.map((m: any) => ({
+        (data || []).map((m: any) => ({
           id: m.id,
-          categoria_texto: m.categoria_texto,
-          emoji_categoria: m.emoji_categoria,
-          titulo: m.titulo,
-          descripcion: m.descripcion,
-          boton_texto: m.boton_texto,
-          imagen_url: m.imagen_url,
-          orden: m.orden,
-          activo: m.activo,
+          categoria_texto: m.categoria_texto ?? m.categoria ?? "",
+          emoji_categoria: m.emoji_categoria ?? "📘",
+          titulo: m.titulo ?? "",
+          descripcion: m.descripcion ?? "",
+          boton_texto: m.boton_texto ?? "Más información",
+          imagen_url: m.imagen_url ?? null,
+          orden: Number(m.orden ?? 1),
+          activo: Number(m.activo ?? 1),
+          file: null,
         }))
       );
 
       setMaterialPage(0);
-    } catch (err) {
-      setMaterialsError("Error al cargar material educativo.");
+    } catch (err: any) {
+      console.error(err);
+      setMaterialsError(err?.message || "Error al cargar material educativo.");
     } finally {
       setLoadingMaterials(false);
     }
@@ -307,7 +298,11 @@ const PrincipalAdmin: React.FC = () => {
         const orden = i + 1;
 
         const form = new FormData();
+
+        // ✅ Compat: manda ambos nombres por si tu backend usa uno u otro
+        form.append("categoria_texto", mat.categoria_texto);
         form.append("categoria", mat.categoria_texto);
+
         form.append("emoji_categoria", mat.emoji_categoria);
         form.append("titulo", mat.titulo);
         form.append("descripcion", mat.descripcion);
@@ -315,27 +310,21 @@ const PrincipalAdmin: React.FC = () => {
         form.append("orden", String(orden));
         form.append("activo", String(mat.activo));
 
-        if (mat.file) {
-          form.append("imagen", mat.file);
-        }
+        if (mat.file) form.append("imagen", mat.file);
 
-        if (mat.id) {
-          await fetch(`${API_BASE}/admin/material/${mat.id}`, {
-            method: "PUT",
-            body: form,
-          });
-        } else {
-          await fetch(`${API_BASE}/admin/material`, {
-            method: "POST",
-            body: form,
-          });
-        }
+        // ✅ CORREGIDO: /api/material (POST) y /api/material/:id (PUT)
+        const url = mat.id ? `${API_BASE}/material/${mat.id}` : `${API_BASE}/material`;
+        const method = mat.id ? "PUT" : "POST";
+
+        const r = await fetch(url, { method, body: form });
+        if (!r.ok) throw new Error("No se pudo guardar una tarjeta de material.");
       }
 
       await loadMaterials();
       setOpenMaterialEditor(false);
       alert("Material educativo guardado.");
     } catch (err) {
+      console.error(err);
       alert("Error guardando material educativo.");
     } finally {
       setSavingMaterials(false);
@@ -348,26 +337,38 @@ const PrincipalAdmin: React.FC = () => {
   const loadTestimonios = async () => {
     try {
       setLoadingTestimonios(true);
-      const res = await fetch(`${API_BASE}/comentarios`);
-      const data = await res.json();
+      setTestimoniosError(null);
 
+      // ✅ CORREGIDO: /api/comentarios
+      const res = await fetch(`${API_BASE}/comentarios`);
+      if (!res.ok) throw new Error("No se pudieron cargar los testimonios.");
+
+      const data = await res.json();
       setTestimonios(
-        data.map((t: any) => ({
-          id: t.id,
-          nombre: t.nombre,
-          iniciales: t.nombre
-            ?.split(" ")
-            .filter(Boolean)
-            .slice(0, 2)
-            .map((p: string) => p[0])
-            .join(""),
-          desde: t.paciente_desde || year,
-          comentario: t.comentario,
-          calificacion: t.calificacion || 5,
-        }))
+        (data || []).map((t: any) => {
+          const nombre = (t.nombre ?? "").toString();
+          const iniciales =
+            nombre
+              .trim()
+              .split(" ")
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((p: string) => p[0].toUpperCase())
+              .join("") || "US";
+
+          return {
+            id: Number(t.id),
+            nombre,
+            iniciales,
+            desde: (t.desde ?? t.paciente_desde ?? year).toString(),
+            comentario: (t.comentario ?? "").toString(),
+            calificacion: Number(t.calificacion ?? 5),
+          };
+        })
       );
-    } catch {
-      setTestimoniosError("No se pudieron cargar los testimonios.");
+    } catch (err: any) {
+      console.error(err);
+      setTestimoniosError(err?.message || "No se pudieron cargar los testimonios.");
     } finally {
       setLoadingTestimonios(false);
     }
@@ -375,65 +376,73 @@ const PrincipalAdmin: React.FC = () => {
 
   // ===== CARGA INICIAL =====
   useEffect(() => {
-    loadAboutBlocks();
-    loadServices();
-    loadMaterials();
-    loadTestimonios();
+    void loadAboutBlocks();
+    void loadServices();
+    void loadMaterials();
+    void loadTestimonios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ======================
-  //   LÓGICA DE CARRUSEL
-  // ======================
-  const servicesPerPage = 3;
-  const materialsPerPage = 3;
+  // reset páginas si cambia tamaño
+  useEffect(() => setServicePage(0), [services.length]);
+  useEffect(() => setMaterialPage(0), [materials.length]);
 
-  // Servicios
-  const totalServicePages =
-    services.length > 0 ? Math.ceil(services.length / servicesPerPage) : 1;
+  // ======================
+  //   CARRUSEL (DERIVADOS)
+  // ======================
+  const totalServicePages = useMemo(
+    () =>
+      services.length > 0 ? Math.ceil(services.length / SERVICES_PER_PAGE) : 1,
+    [services.length]
+  );
 
-  const paginatedServices = services.slice(
-    servicePage * servicesPerPage,
-    servicePage * servicesPerPage + servicesPerPage
+  const paginatedServices = useMemo(
+    () =>
+      services.slice(
+        servicePage * SERVICES_PER_PAGE,
+        servicePage * SERVICES_PER_PAGE + SERVICES_PER_PAGE
+      ),
+    [services, servicePage]
+  );
+
+  const totalMaterialPages = useMemo(
+    () =>
+      materials.length > 0
+        ? Math.ceil(materials.length / MATERIALS_PER_PAGE)
+        : 1,
+    [materials.length]
+  );
+
+  const paginatedMaterials = useMemo(
+    () =>
+      materials.slice(
+        materialPage * MATERIALS_PER_PAGE,
+        materialPage * MATERIALS_PER_PAGE + MATERIALS_PER_PAGE
+      ),
+    [materials, materialPage]
   );
 
   const handlePrevServicePage = () => {
-    if (services.length <= servicesPerPage) return;
-    setServicePage((prev) =>
-      prev === 0 ? totalServicePages - 1 : prev - 1
-    );
+    if (services.length <= SERVICES_PER_PAGE) return;
+    setServicePage((prev) => (prev === 0 ? totalServicePages - 1 : prev - 1));
   };
 
   const handleNextServicePage = () => {
-    if (services.length <= servicesPerPage) return;
-    setServicePage((prev) =>
-      prev === totalServicePages - 1 ? 0 : prev + 1
-    );
+    if (services.length <= SERVICES_PER_PAGE) return;
+    setServicePage((prev) => (prev === totalServicePages - 1 ? 0 : prev + 1));
   };
 
-  // Material Educativo
-  const totalMaterialPages =
-    materials.length > 0 ? Math.ceil(materials.length / materialsPerPage) : 1;
-
-  const paginatedMaterials = materials.slice(
-    materialPage * materialsPerPage,
-    materialPage * materialsPerPage + materialsPerPage
-  );
-
   const handlePrevMaterialPage = () => {
-    if (materials.length <= materialsPerPage) return;
-    setMaterialPage((prev) =>
-      prev === 0 ? totalMaterialPages - 1 : prev - 1
-    );
+    if (materials.length <= MATERIALS_PER_PAGE) return;
+    setMaterialPage((prev) => (prev === 0 ? totalMaterialPages - 1 : prev - 1));
   };
 
   const handleNextMaterialPage = () => {
-    if (materials.length <= materialsPerPage) return;
-    setMaterialPage((prev) =>
-      prev === totalMaterialPages - 1 ? 0 : prev + 1
-    );
+    if (materials.length <= MATERIALS_PER_PAGE) return;
+    setMaterialPage((prev) => (prev === totalMaterialPages - 1 ? 0 : prev + 1));
   };
 
-   return (
+  return (
     <div lang="es">
       {/* ===== NAV ===== */}
       <nav className="nav">
@@ -441,6 +450,7 @@ const PrincipalAdmin: React.FC = () => {
           <img src={logoManzana} alt="Logo AnNutrition" className="nav__icon" />
           <span>AnNutrition</span>
         </div>
+
         <ul className="nav__menu">
           <li><a href="#inicio">Inicio</a></li>
           <li><a href="#quienes">¿Quiénes somos?</a></li>
@@ -450,11 +460,8 @@ const PrincipalAdmin: React.FC = () => {
           <li><a href="#testimonios">Opiniones</a></li>
           <li><a href="#contacto">Contacto</a></li>
         </ul>
-        <button
-          type="button"
-          className="btn-outline"
-          onClick={handleLogout}
-        >
+
+        <button type="button" className="btn-outline" onClick={handleLogout}>
           Cerrar sesión
         </button>
       </nav>
@@ -468,7 +475,9 @@ const PrincipalAdmin: React.FC = () => {
             acompañamiento profesional
           </h1>
           <div className="hero__buttons">
-            <button className="btn-primary" type="button">Agenda tu consulta</button>
+            <button className="btn-primary" type="button">
+              Agenda tu consulta
+            </button>
           </div>
           <div className="hero__stats">
             <div>
@@ -500,10 +509,20 @@ const PrincipalAdmin: React.FC = () => {
           <div className="about__panel">
             <div className="about__title-row">
               <h2 className="about__title">¿Quiénes somos?</h2>
+
+              <button
+                type="button"
+                className="title-action"
+                aria-label="Editar sección ¿Quiénes somos?"
+                onClick={() => setOpenEditor(true)}
+              >
+                +
+              </button>
             </div>
 
             <p className="about__lead">
-              Somos un equipo de profesionales apasionados por la nutrición y el bienestar integral
+              Somos un equipo de profesionales apasionados por la nutrición y el
+              bienestar integral
             </p>
 
             <ul className="about__list">
@@ -517,8 +536,9 @@ const PrincipalAdmin: React.FC = () => {
                 <div>
                   <h3>Nuestra Misión</h3>
                   <p>
-                    Mejorar la calidad de vida de nuestros pacientes mediante planes nutricionales
-                    personalizados y basados en evidencia científica.
+                    Mejorar la calidad de vida de nuestros pacientes mediante
+                    planes nutricionales personalizados y basados en evidencia
+                    científica.
                   </p>
                 </div>
               </li>
@@ -532,8 +552,9 @@ const PrincipalAdmin: React.FC = () => {
                 <div>
                   <h3>Nuestra Visión</h3>
                   <p>
-                    Ser el centro de nutrición líder en México, reconocido por la excelencia en nuestros
-                    servicios y resultados transformadores.
+                    Ser el centro de nutrición líder en México, reconocido por
+                    la excelencia en nuestros servicios y resultados
+                    transformadores.
                   </p>
                 </div>
               </li>
@@ -547,20 +568,19 @@ const PrincipalAdmin: React.FC = () => {
                 <div>
                   <h3>Nuestros Valores</h3>
                   <p>
-                    Compromiso, profesionalismo, empatía e innovación guían cada una de nuestras acciones.
+                    Compromiso, profesionalismo, empatía e innovación guían cada
+                    una de nuestras acciones.
                   </p>
                 </div>
               </li>
 
-              {/* Bloques extra desde BD */}
+              {/* Bloques extra (solo UI) */}
               {aboutBlocks.map((block) => (
                 <li
                   className="about__item"
                   key={block.id ?? `${block.titulo}-${block.orden}`}
                 >
-                  <span className="badge">
-                    {block.iconoEmoji || "🍏"}
-                  </span>
+                  <span className="badge">{block.iconoEmoji || "🍏"}</span>
                   <div>
                     <h3>{block.titulo}</h3>
                     <p>{block.descripcion}</p>
@@ -568,6 +588,9 @@ const PrincipalAdmin: React.FC = () => {
                 </li>
               ))}
             </ul>
+
+            {loadingAbout && <p className="muted">Cargando bloques…</p>}
+            {aboutError && <p className="error">{aboutError}</p>}
           </div>
         </div>
 
@@ -578,7 +601,7 @@ const PrincipalAdmin: React.FC = () => {
           aria-hidden={!openEditor}
         />
 
-        {/* Panel lateral (drawer) */}
+        {/* Drawer */}
         <aside
           className={`admin-drawer ${openEditor ? "is-open" : ""}`}
           role="dialog"
@@ -591,30 +614,16 @@ const PrincipalAdmin: React.FC = () => {
               className="icon-close"
               aria-label="Cerrar"
               onClick={() => setOpenEditor(false)}
+              type="button"
             >
               ×
             </button>
           </header>
 
           <div className="admin-drawer__body">
-            {/* Imagen principal (solo visual por ahora) */}
-            <section className="panel-block">
-              <h4>Imagen principal</h4>
-              <div className="uploader">
-                <div className="uploader__thumb"></div>
-                <div className="uploader__fields">
-                  <input type="file" accept="image/*" />
-                  <p className="muted small">PNG/JPG hasta 2MB</p>
-                </div>
-              </div>
-            </section>
-
-            <hr />
-
-            {/* Repetidor de bloques */}
             <section className="panel-block">
               <div className="panel-block__head">
-                <h4>Bloques</h4>
+                <h4>Bloques (solo visual)</h4>
                 <button
                   type="button"
                   className="btn-outline sm"
@@ -635,21 +644,15 @@ const PrincipalAdmin: React.FC = () => {
                 </button>
               </div>
 
-              {loadingAbout && <p className="muted">Cargando bloques…</p>}
-              {aboutError && <p className="error">{aboutError}</p>}
-
               {aboutBlocks.map((block, index) => (
                 <div
                   className="repeater-row"
                   key={block.id ?? `nuevo-${index}`}
                 >
-                  <span
-                    className="drag-handle"
-                    title="Arrastrar para reordenar (visual)"
-                  >
+                  <span className="drag-handle" title="Arrastrar (visual)">
                     ⋮⋮
                   </span>
-                  <div className="repeater-thumb"></div>
+
                   <div className="repeater-fields">
                     <label>
                       Título
@@ -659,12 +662,15 @@ const PrincipalAdmin: React.FC = () => {
                         onChange={(e) =>
                           setAboutBlocks((prev) =>
                             prev.map((b, i) =>
-                              i === index ? { ...b, titulo: e.target.value } : b
+                              i === index
+                                ? { ...b, titulo: e.target.value }
+                                : b
                             )
                           )
                         }
                       />
                     </label>
+
                     <label>
                       Descripción
                       <textarea
@@ -681,9 +687,10 @@ const PrincipalAdmin: React.FC = () => {
                         }
                       />
                     </label>
+
                     <div className="inline-2">
                       <label>
-                        Emoji / Ícono
+                        Emoji
                         <input
                           type="text"
                           value={block.iconoEmoji}
@@ -698,6 +705,7 @@ const PrincipalAdmin: React.FC = () => {
                           }
                         />
                       </label>
+
                       <label>
                         Orden
                         <input
@@ -719,40 +727,18 @@ const PrincipalAdmin: React.FC = () => {
                         />
                       </label>
                     </div>
-                    <div className="inline-2">
-                      <label>
-                        Ícono/Imagen (opcional)
-                        <input type="file" accept="image/*,image/svg+xml" />
-                      </label>
-                    </div>
                   </div>
+
                   <div className="row-actions">
                     <button
                       className="icon-btn danger"
                       title="Eliminar"
                       type="button"
-                      onClick={async () => {
-                        const blockToDelete = aboutBlocks[index];
-                        if (blockToDelete.id) {
-                          try {
-                            const res = await fetch(
-                              `${API_BASE}/admin/about/${blockToDelete.id}`,
-                              { method: "DELETE" }
-                            );
-                            if (!res.ok)
-                              throw new Error("No se pudo eliminar el bloque");
-                          } catch (err) {
-                            console.error(err);
-                            alert(
-                              "Error al eliminar el bloque en el servidor."
-                            );
-                            return;
-                          }
-                        }
+                      onClick={() =>
                         setAboutBlocks((prev) =>
                           prev.filter((_, i) => i !== index)
-                        );
-                      }}
+                        )
+                      }
                     >
                       🗑
                     </button>
@@ -762,7 +748,7 @@ const PrincipalAdmin: React.FC = () => {
 
               {!loadingAbout && aboutBlocks.length === 0 && (
                 <p className="muted small">
-                  No hay bloques. Usa “+ Agregar bloque” para crear uno nuevo.
+                  No hay bloques. Usa “+ Agregar bloque”.
                 </p>
               )}
             </section>
@@ -857,15 +843,18 @@ const PrincipalAdmin: React.FC = () => {
         <p className="section-subtitle">
           Conoce al equipo de expertos que te acompañará en tu transformación
         </p>
+
         <div className="cards cards--grid-2">
           <article className="card card--advisor">
             <img src={asesor1} alt="M.N.D. Alejandra Jocelyn Gómez Nava" />
             <div className="card__body">
-              <h3 className="card__title">M.N.D. Alejandra Jocelyn Gómez Nava</h3>
+              <h3 className="card__title">
+                M.N.D. Alejandra Jocelyn Gómez Nava
+              </h3>
               <a className="link">Nutrición Clínica</a>
               <p className="muted">7 años de experiencia</p>
-              <button 
-                className="btn-outline full" 
+              <button
+                className="btn-outline full"
                 type="button"
                 onClick={() => navigate("/asesora")}
               >
@@ -873,14 +862,15 @@ const PrincipalAdmin: React.FC = () => {
               </button>
             </div>
           </article>
+
           <article className="card card--advisor">
             <img src={asesor2} alt="M.N.D. Noé Toribio Trujillo" />
             <div className="card__body">
               <h3 className="card__title">M.N.D. Noé Toribio Trujillo</h3>
               <a className="link">Nutrición Clínica</a>
               <p className="muted">7 años de experiencia</p>
-              <button 
-                className="btn-outline full" 
+              <button
+                className="btn-outline full"
                 type="button"
                 onClick={() => navigate("/asesor")}
               >
@@ -914,7 +904,7 @@ const PrincipalAdmin: React.FC = () => {
             type="button"
             className="carousel-arrow carousel-arrow--left"
             onClick={handlePrevServicePage}
-            disabled={services.length <= servicesPerPage}
+            disabled={services.length <= SERVICES_PER_PAGE}
           >
             ‹
           </button>
@@ -924,11 +914,9 @@ const PrincipalAdmin: React.FC = () => {
               {loadingServices && <p className="muted">Cargando servicios…</p>}
               {servicesError && <p className="error">{servicesError}</p>}
 
-              {!loadingServices &&
-                !servicesError &&
-                services.length === 0 && (
-                  <p className="muted">Aún no se han registrado servicios.</p>
-                )}
+              {!loadingServices && !servicesError && services.length === 0 && (
+                <p className="muted">Aún no se han registrado servicios.</p>
+              )}
 
               {paginatedServices.map((srv) => (
                 <article
@@ -959,13 +947,13 @@ const PrincipalAdmin: React.FC = () => {
             type="button"
             className="carousel-arrow carousel-arrow--right"
             onClick={handleNextServicePage}
-            disabled={services.length <= servicesPerPage}
+            disabled={services.length <= SERVICES_PER_PAGE}
           >
             ›
           </button>
         </div>
 
-        {services.length > servicesPerPage && (
+        {services.length > SERVICES_PER_PAGE && (
           <div className="carousel-dots">
             {Array.from({ length: totalServicePages }).map((_, i) => (
               <button
@@ -1002,6 +990,7 @@ const PrincipalAdmin: React.FC = () => {
               className="icon-close"
               aria-label="Cerrar"
               onClick={() => setOpenServicesEditor(false)}
+              type="button"
             >
               ×
             </button>
@@ -1035,15 +1024,12 @@ const PrincipalAdmin: React.FC = () => {
               </button>
             </div>
 
-            {loadingServices && <p className="muted">Cargando servicios…</p>}
-            {servicesError && <p className="error">{servicesError}</p>}
-
             {services.map((srv, index) => (
               <div className="repeater-row" key={srv.id ?? `nuevo-${index}`}>
                 <span className="drag-handle" title="Arrastrar para reordenar">
                   ⋮⋮
                 </span>
-                <div className="repeater-thumb"></div>
+
                 <div className="repeater-fields">
                   <div className="inline-2">
                     <label>
@@ -1054,12 +1040,15 @@ const PrincipalAdmin: React.FC = () => {
                         onChange={(e) =>
                           setServices((prev) =>
                             prev.map((s, i) =>
-                              i === index ? { ...s, titulo: e.target.value } : s
+                              i === index
+                                ? { ...s, titulo: e.target.value }
+                                : s
                             )
                           )
                         }
                       />
                     </label>
+
                     <label>
                       Precio (texto)
                       <input
@@ -1087,12 +1076,15 @@ const PrincipalAdmin: React.FC = () => {
                         onChange={(e) =>
                           setServices((prev) =>
                             prev.map((s, i) =>
-                              i === index ? { ...s, punto1: e.target.value } : s
+                              i === index
+                                ? { ...s, punto1: e.target.value }
+                                : s
                             )
                           )
                         }
                       />
                     </label>
+
                     <label>
                       Punto 2
                       <input
@@ -1101,12 +1093,15 @@ const PrincipalAdmin: React.FC = () => {
                         onChange={(e) =>
                           setServices((prev) =>
                             prev.map((s, i) =>
-                              i === index ? { ...s, punto2: e.target.value } : s
+                              i === index
+                                ? { ...s, punto2: e.target.value }
+                                : s
                             )
                           )
                         }
                       />
                     </label>
+
                     <label>
                       Punto 3
                       <input
@@ -1115,7 +1110,9 @@ const PrincipalAdmin: React.FC = () => {
                         onChange={(e) =>
                           setServices((prev) =>
                             prev.map((s, i) =>
-                              i === index ? { ...s, punto3: e.target.value } : s
+                              i === index
+                                ? { ...s, punto3: e.target.value }
+                                : s
                             )
                           )
                         }
@@ -1140,8 +1137,28 @@ const PrincipalAdmin: React.FC = () => {
                         }
                       />
                     </label>
+
+                    <label>
+                      Activo (1/0)
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        value={srv.activo}
+                        onChange={(e) =>
+                          setServices((prev) =>
+                            prev.map((s, i) =>
+                              i === index
+                                ? { ...s, activo: Number(e.target.value) || 0 }
+                                : s
+                            )
+                          )
+                        }
+                      />
+                    </label>
                   </div>
                 </div>
+
                 <div className="row-actions">
                   <button
                     className="icon-btn danger"
@@ -1149,25 +1166,24 @@ const PrincipalAdmin: React.FC = () => {
                     type="button"
                     onClick={async () => {
                       const current = services[index];
+
                       if (current.id) {
                         try {
+                          // ✅ CORREGIDO: /api/servicios/:id
                           const res = await fetch(
-                            `${API_BASE}/admin/servicios/${current.id}`,
+                            `${API_BASE}/servicios/${current.id}`,
                             { method: "DELETE" }
                           );
                           if (!res.ok)
                             throw new Error("No se pudo eliminar el servicio.");
                         } catch (err) {
                           console.error(err);
-                          alert(
-                            "Error al eliminar el servicio en el servidor."
-                          );
+                          alert("Error al eliminar el servicio en el servidor.");
                           return;
                         }
                       }
-                      setServices((prev) =>
-                        prev.filter((_, i) => i !== index)
-                      );
+
+                      setServices((prev) => prev.filter((_, i) => i !== index));
                     }}
                   >
                     🗑
@@ -1175,12 +1191,6 @@ const PrincipalAdmin: React.FC = () => {
                 </div>
               </div>
             ))}
-
-            {!loadingServices && services.length === 0 && !servicesError && (
-              <p className="muted small">
-                No hay servicios. Usa “+ Agregar servicio” para crear uno nuevo.
-              </p>
-            )}
           </div>
 
           <footer className="admin-drawer__footer">
@@ -1226,7 +1236,7 @@ const PrincipalAdmin: React.FC = () => {
             type="button"
             className="carousel-arrow carousel-arrow--left"
             onClick={handlePrevMaterialPage}
-            disabled={materials.length <= materialsPerPage}
+            disabled={materials.length <= MATERIALS_PER_PAGE}
           >
             ‹
           </button>
@@ -1246,7 +1256,7 @@ const PrincipalAdmin: React.FC = () => {
 
               {paginatedMaterials.map((mat, index) => {
                 const imgSrc = mat.imagen_url
-                  ? `http://localhost:4000${mat.imagen_url}`
+                  ? `${SERVER_BASE}${mat.imagen_url}`
                   : materialImages[index % materialImages.length];
 
                 return (
@@ -1275,13 +1285,13 @@ const PrincipalAdmin: React.FC = () => {
             type="button"
             className="carousel-arrow carousel-arrow--right"
             onClick={handleNextMaterialPage}
-            disabled={materials.length <= materialsPerPage}
+            disabled={materials.length <= MATERIALS_PER_PAGE}
           >
             ›
           </button>
         </div>
 
-        {materials.length > materialsPerPage && (
+        {materials.length > MATERIALS_PER_PAGE && (
           <div className="carousel-dots">
             {Array.from({ length: totalMaterialPages }).map((_, i) => (
               <button
@@ -1317,6 +1327,7 @@ const PrincipalAdmin: React.FC = () => {
               className="icon-close"
               aria-label="Cerrar"
               onClick={() => setOpenMaterialEditor(false)}
+              type="button"
             >
               ×
             </button>
@@ -1340,6 +1351,7 @@ const PrincipalAdmin: React.FC = () => {
                       imagen_url: null,
                       orden: prev.length + 1,
                       activo: 1,
+                      file: null,
                     },
                   ])
                 }
@@ -1348,15 +1360,12 @@ const PrincipalAdmin: React.FC = () => {
               </button>
             </div>
 
-            {loadingMaterials && <p className="muted">Cargando material…</p>}
-            {materialsError && <p className="error">{materialsError}</p>}
-
             {materials.map((mat, index) => (
               <div className="repeater-row" key={mat.id ?? `nuevo-${index}`}>
                 <span className="drag-handle" title="Arrastrar para reordenar">
                   ⋮⋮
                 </span>
-                <div className="repeater-thumb material-thumb"></div>
+
                 <div className="repeater-fields">
                   <div className="inline-2">
                     <label>
@@ -1375,6 +1384,7 @@ const PrincipalAdmin: React.FC = () => {
                         }
                       />
                     </label>
+
                     <label>
                       Emoji categoría
                       <input
@@ -1392,6 +1402,7 @@ const PrincipalAdmin: React.FC = () => {
                       />
                     </label>
                   </div>
+
                   <label>
                     Título
                     <input
@@ -1400,14 +1411,13 @@ const PrincipalAdmin: React.FC = () => {
                       onChange={(e) =>
                         setMaterials((prev) =>
                           prev.map((m, i) =>
-                            i === index
-                              ? { ...m, titulo: e.target.value }
-                              : m
+                            i === index ? { ...m, titulo: e.target.value } : m
                           )
                         )
                       }
                     />
                   </label>
+
                   <label>
                     Descripción
                     <textarea
@@ -1424,6 +1434,7 @@ const PrincipalAdmin: React.FC = () => {
                       }
                     />
                   </label>
+
                   <div className="inline-2">
                     <label>
                       Subir imagen
@@ -1440,6 +1451,7 @@ const PrincipalAdmin: React.FC = () => {
                         }}
                       />
                     </label>
+
                     <label>
                       Botón (texto)
                       <input
@@ -1457,9 +1469,29 @@ const PrincipalAdmin: React.FC = () => {
                       />
                     </label>
                   </div>
+
                   <div className="inline-2">
+                    <label>
+                      Activo (1/0)
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        value={mat.activo}
+                        onChange={(e) =>
+                          setMaterials((prev) =>
+                            prev.map((m, i) =>
+                              i === index
+                                ? { ...m, activo: Number(e.target.value) || 0 }
+                                : m
+                            )
+                          )
+                        }
+                      />
+                    </label>
                   </div>
                 </div>
+
                 <div className="row-actions">
                   <button
                     className="icon-btn danger"
@@ -1467,25 +1499,24 @@ const PrincipalAdmin: React.FC = () => {
                     type="button"
                     onClick={async () => {
                       const current = materials[index];
+
                       if (current.id) {
                         try {
+                          // ✅ CORREGIDO: /api/material/:id
                           const res = await fetch(
-                            `${API_BASE}/admin/material/${current.id}`,
+                            `${API_BASE}/material/${current.id}`,
                             { method: "DELETE" }
                           );
                           if (!res.ok)
                             throw new Error("No se pudo eliminar el material.");
                         } catch (err) {
                           console.error(err);
-                          alert(
-                            "Error al eliminar el material en el servidor."
-                          );
+                          alert("Error al eliminar el material en el servidor.");
                           return;
                         }
                       }
-                      setMaterials((prev) =>
-                        prev.filter((_, i) => i !== index)
-                      );
+
+                      setMaterials((prev) => prev.filter((_, i) => i !== index));
                     }}
                   >
                     🗑
@@ -1493,14 +1524,6 @@ const PrincipalAdmin: React.FC = () => {
                 </div>
               </div>
             ))}
-
-            {!loadingMaterials &&
-              materials.length === 0 &&
-              !materialsError && (
-                <p className="muted small">
-                  No hay material. Usa “+ Agregar tarjeta” para crear uno nuevo.
-                </p>
-              )}
           </div>
 
           <footer className="admin-drawer__footer">
@@ -1522,6 +1545,7 @@ const PrincipalAdmin: React.FC = () => {
           </footer>
         </aside>
       </section>
+
       {/* ===== TESTIMONIOS ===== */}
       <section id="testimonios" className="testimonios">
         <h2 className="section-title">Lo que dicen nuestros pacientes</h2>
@@ -1530,9 +1554,7 @@ const PrincipalAdmin: React.FC = () => {
         {loadingTestimonios && (
           <p className="muted">Cargando testimonios…</p>
         )}
-        {testimoniosError && (
-          <p className="error">{testimoniosError}</p>
-        )}
+        {testimoniosError && <p className="error">{testimoniosError}</p>}
 
         <div className="cards cards--grid-3">
           {testimonios.map((t) => (
@@ -1555,14 +1577,12 @@ const PrincipalAdmin: React.FC = () => {
           {!loadingTestimonios &&
             !testimoniosError &&
             testimonios.length === 0 && (
-              <p className="muted">
-                Aún no hay comentarios registrados.
-              </p>
+              <p className="muted">Aún no hay comentarios registrados.</p>
             )}
         </div>
       </section>
 
-      {/* ===== CONTACTO ===== */}
+      {/* ===== CONTACTO (visual) ===== */}
       <section id="contacto" className="contacto">
         <h2 className="section-title">Contáctanos</h2>
         <p className="section-subtitle">
@@ -1570,7 +1590,6 @@ const PrincipalAdmin: React.FC = () => {
         </p>
 
         <div className="contacto__grid">
-          {/* FORMULARIO */}
           <form className="form" onSubmit={(e) => e.preventDefault()}>
             <label>Nombre completo</label>
             <input type="text" placeholder="Tu nombre" />
@@ -1589,14 +1608,14 @@ const PrincipalAdmin: React.FC = () => {
             </button>
           </form>
 
-          {/* INFO CONTACTO */}
           <div className="contacto__info">
             <div className="info-box">
               <div className="info-ico">📍</div>
               <div>
                 <h4>Ubicación</h4>
                 <p className="muted">
-                  Avenida 30 de Abril #64, Colonia Centro, Buenavista de Cuéllar 40330
+                  Avenida 30 de Abril #64, Colonia Centro, Buenavista de Cuéllar
+                  40330
                 </p>
               </div>
             </div>
@@ -1605,9 +1624,7 @@ const PrincipalAdmin: React.FC = () => {
               <div className="info-ico">📞</div>
               <div>
                 <h4>Teléfono</h4>
-                <p className="muted">
-                 727 100 1860
-                </p>
+                <p className="muted">727 100 1860</p>
               </div>
             </div>
 
@@ -1615,9 +1632,7 @@ const PrincipalAdmin: React.FC = () => {
               <div className="info-ico">✉️</div>
               <div>
                 <h4>Email</h4>
-                <p className="muted">
-                  an.nutricion@outlook.com
-                </p>
+                <p className="muted">an.nutricion@outlook.com</p>
               </div>
             </div>
 
@@ -1659,9 +1674,7 @@ const PrincipalAdmin: React.FC = () => {
               <img src={logoManzana} alt="AnNutrition" className="nav__icon" />
               <strong>AnNutrition</strong>
             </div>
-            <p className="muted">
-              Planes nutricionales personalizados.
-            </p>
+            <p className="muted">Planes nutricionales personalizados.</p>
           </div>
 
           <div>
@@ -1679,12 +1692,12 @@ const PrincipalAdmin: React.FC = () => {
             <h4>Contacto</h4>
             <ul className="footer__links">
               <li>
-                <a href="mailto:contacto@nutrisystem.com">
+                <a href="mailto:an.nutricion@outlook.com">
                   an.nutricion@outlook.com
                 </a>
               </li>
               <li>
-                <a href="tel:+525551234567">7271001860</a>
+                <a href="tel:+527271001860">7271001860</a>
               </li>
             </ul>
 
