@@ -1,15 +1,18 @@
 // src/backend/controllers/authController.js
+"use strict";
+
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
-const { createTransporter } = require("../mail/mailer");
+
+// ✅ Ajuste: tu mailer real (según lo que mostraste) es src/backend/mailer.js
+const { createTransporter } = require("../mailer");
 
 // =====================
 // CONFIG
 // =====================
-const FRONTEND_URL =
-  process.env.FRONTEND_URL || "http://localhost:5173";
+const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, "");
 
 if (!process.env.JWT_SECRET) {
   throw new Error("❌ JWT_SECRET no está definido en variables de entorno");
@@ -31,17 +34,24 @@ function generateToken(user) {
   );
 }
 
+function pickUser(user) {
+  return {
+    id: user.id,
+    nombre: user.nombre,
+    email: user.email,
+    role: user.role,
+  };
+}
+
 // =====================
 // LOGIN
 // =====================
 async function login(req, res) {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
     if (!email || !password) {
-      return res.status(400).json({
-        message: "Email y contraseña son obligatorios",
-      });
+      return res.status(400).json({ message: "Email y contraseña son obligatorios" });
     }
 
     const [rows] = await pool.query(
@@ -54,26 +64,21 @@ async function login(req, res) {
     }
 
     const user = rows[0];
-    const ok = await bcrypt.compare(password, user.password);
 
+    const ok = await bcrypt.compare(password, user.password);
     if (!ok) {
       return res.status(401).json({ message: "Credenciales inválidas" });
     }
 
     const token = generateToken(user);
 
-    res.json({
+    return res.json({
       token,
-      user: {
-        id: user.id,
-        nombre: user.nombre,
-        email: user.email,
-        role: user.role,
-      },
+      user: pickUser(user),
     });
   } catch (err) {
     console.error("❌ Error en login:", err);
-    res.status(500).json({ message: "Error interno del servidor" });
+    return res.status(500).json({ message: "Error interno del servidor" });
   }
 }
 
@@ -82,12 +87,10 @@ async function login(req, res) {
 // =====================
 async function register(req, res) {
   try {
-    const { nombre, email, password } = req.body;
+    const { nombre, email, password } = req.body || {};
 
     if (!nombre || !email || !password) {
-      return res.status(400).json({
-        message: "Nombre, email y contraseña son obligatorios",
-      });
+      return res.status(400).json({ message: "Nombre, email y contraseña son obligatorios" });
     }
 
     const [exists] = await pool.query(
@@ -96,9 +99,7 @@ async function register(req, res) {
     );
 
     if (exists.length > 0) {
-      return res.status(409).json({
-        message: "Ya existe una cuenta con ese correo",
-      });
+      return res.status(409).json({ message: "Ya existe una cuenta con ese correo" });
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -118,14 +119,38 @@ async function register(req, res) {
 
     const token = generateToken(user);
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Cuenta creada correctamente",
       user,
       token,
     });
   } catch (err) {
     console.error("❌ Error en register:", err);
-    res.status(500).json({ message: "Error interno al crear la cuenta" });
+    return res.status(500).json({ message: "Error interno al crear la cuenta" });
+  }
+}
+
+// =====================
+// ME (opcional pero recomendado)
+// =====================
+async function me(req, res) {
+  try {
+    const auth = req.headers.authorization || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+    if (!token) return res.status(401).json({ message: "Token requerido" });
+
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+
+    const [rows] = await pool.query(
+      "SELECT id, nombre, email, role FROM usuarios WHERE id = ? LIMIT 1",
+      [payload.id]
+    );
+
+    if (!rows.length) return res.status(404).json({ message: "Usuario no encontrado" });
+
+    return res.json({ user: rows[0] });
+  } catch (err) {
+    return res.status(401).json({ message: "Token inválido o expirado" });
   }
 }
 
@@ -134,13 +159,8 @@ async function register(req, res) {
 // =====================
 async function forgotPassword(req, res) {
   try {
-    const { email } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        message: "El correo es obligatorio",
-      });
-    }
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ message: "El correo es obligatorio" });
 
     const [users] = await pool.query(
       "SELECT id, nombre FROM usuarios WHERE email = ? LIMIT 1",
@@ -150,18 +170,32 @@ async function forgotPassword(req, res) {
     // Respuesta neutra por seguridad
     if (users.length === 0) {
       return res.json({
+        message: "Si el correo existe, recibirás un enlace para restablecer tu contraseña",
+      });
+    }
+
+    // ✅ Verifica configuración de correo (evita 500 si falta algo en Railway)
+    const canMail =
+      process.env.MAIL_HOST &&
+      process.env.MAIL_PORT &&
+      process.env.MAIL_USER &&
+      process.env.MAIL_PASS;
+
+    if (!canMail) {
+      return res.status(500).json({
         message:
-          "Si el correo existe, recibirás un enlace para restablecer tu contraseña",
+          "Falta configurar MAIL_HOST/MAIL_PORT/MAIL_USER/MAIL_PASS en el servidor",
       });
     }
 
     const user = users[0];
     const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
 
+    // ✅ OJO: esto requiere tabla password_resets
+    // Si NO tienes esa tabla, comenta este bloque y dime para darte el SQL.
     await pool.query(
-      `INSERT INTO password_resets
-       (user_id, token, expires_at, usado, creado_en)
+      `INSERT INTO password_resets (user_id, token, expires_at, usado, creado_en)
        VALUES (?, ?, ?, 0, NOW())`,
       [user.id, token, expiresAt]
     );
@@ -176,24 +210,19 @@ async function forgotPassword(req, res) {
       html: `
         <p>Hola ${user.nombre},</p>
         <p>Solicitaste restablecer tu contraseña.</p>
-        <p>
-          <a href="${resetLink}" target="_blank">
-            Restablecer contraseña
-          </a>
-        </p>
+        <p><a href="${resetLink}" target="_blank" rel="noreferrer">Restablecer contraseña</a></p>
         <p>Este enlace es válido por 1 hora.</p>
         <br/>
         <p>Equipo AnNutrition</p>
       `,
     });
 
-    res.json({
-      message:
-        "Si el correo existe, recibirás un enlace para restablecer tu contraseña",
+    return res.json({
+      message: "Si el correo existe, recibirás un enlace para restablecer tu contraseña",
     });
   } catch (err) {
     console.error("❌ Error en forgotPassword:", err);
-    res.status(500).json({ message: "Error al procesar la solicitud" });
+    return res.status(500).json({ message: "Error al procesar la solicitud" });
   }
 }
 
@@ -202,12 +231,9 @@ async function forgotPassword(req, res) {
 // =====================
 async function resetPassword(req, res) {
   try {
-    const { token, password } = req.body;
-
+    const { token, password } = req.body || {};
     if (!token || !password) {
-      return res.status(400).json({
-        message: "Token y nueva contraseña son obligatorios",
-      });
+      return res.status(400).json({ message: "Token y nueva contraseña son obligatorios" });
     }
 
     const [rows] = await pool.query(
@@ -218,43 +244,35 @@ async function resetPassword(req, res) {
     );
 
     if (rows.length === 0) {
-      return res.status(400).json({
-        message: "Token inválido o ya utilizado",
-      });
+      return res.status(400).json({ message: "Token inválido o ya utilizado" });
     }
 
     const reset = rows[0];
 
     if (new Date() > new Date(reset.expires_at)) {
-      return res.status(400).json({
-        message: "El token ha expirado",
-      });
+      return res.status(400).json({ message: "El token ha expirado" });
     }
 
     const hash = await bcrypt.hash(password, 10);
 
-    await pool.query(
-      "UPDATE usuarios SET password = ? WHERE id = ?",
-      [hash, reset.user_id]
-    );
+    await pool.query("UPDATE usuarios SET password = ? WHERE id = ?", [
+      hash,
+      reset.user_id,
+    ]);
 
-    await pool.query(
-      "UPDATE password_resets SET usado = 1 WHERE id = ?",
-      [reset.id]
-    );
+    await pool.query("UPDATE password_resets SET usado = 1 WHERE id = ?", [reset.id]);
 
-    res.json({
-      message: "Contraseña actualizada correctamente",
-    });
+    return res.json({ message: "Contraseña actualizada correctamente" });
   } catch (err) {
     console.error("❌ Error en resetPassword:", err);
-    res.status(500).json({ message: "Error al restablecer la contraseña" });
+    return res.status(500).json({ message: "Error al restablecer la contraseña" });
   }
 }
 
 module.exports = {
   login,
   register,
+  me,
   forgotPassword,
   resetPassword,
 };
