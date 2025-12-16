@@ -3,53 +3,91 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 
-const authRoutes = require("./routes/auth");
-const serviciosRoutes = require("./routes/servicios");
-const comentariosRoutes = require("./routes/comentarios");
-const materialRoutes = require("./routes/material");
+// Rutas (deben coincidir con tus archivos)
+const authRoutes = require("./routes/authRoutes");
+const materialRoutes = require("./routes/materialRoutes");
+const serviciosRoutes = require("./routes/serviciosRoutes");
+
+// Si tienes comentariosRoutes, descomenta y asegúrate que exista el archivo:
+// const comentariosRoutes = require("./routes/comentariosRoutes");
 
 const app = express();
 
 // =====================
-// CORS (CLARO Y SEGURO)
+// CORS
 // =====================
-const FRONTEND_URL = process.env.FRONTEND_URL;
-
-if (!FRONTEND_URL) {
-  console.error("❌ FRONTEND_URL no está definido");
-  process.exit(1);
-}
+const allowedOrigins = [
+  process.env.FRONTEND_URL,              // ej: https://software-six-weld.vercel.app
+  "http://localhost:5173",
+].filter(Boolean);
 
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin: (origin, cb) => {
+      // Permite Postman / server-to-server (origin undefined)
+      if (!origin) return cb(null, true);
+
+      // Permite el FRONTEND_URL exacto
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+
+      // Permite previews de Vercel tipo: https://xxxxx.vercel.app
+      if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return cb(null, true);
+
+      return cb(new Error(`CORS bloqueado para: ${origin}`), false);
+    },
     credentials: true,
   })
 );
 
-app.use(express.json());
+// =====================
+// Middlewares
+// =====================
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true }));
 
 // =====================
-// HEALTH CHECK
+// Static (si sirves uploads)
+// =====================
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// =====================
+// Health check
 // =====================
 app.get("/api/health", (req, res) => {
-  res.json({ message: "API AnNutrition funcionando" });
+  res.json({ ok: true, service: "AnNutrition API", ts: Date.now() });
 });
 
 // =====================
-// ROUTES
+// API Routes
 // =====================
 app.use("/api/auth", authRoutes);
-app.use("/api/servicios", serviciosRoutes);
-app.use("/api/comentarios", comentariosRoutes);
 app.use("/api/material", materialRoutes);
+app.use("/api/servicios", serviciosRoutes);
+
+// Si existe:
+// app.use("/api/comentarios", comentariosRoutes);
 
 // =====================
-// START SERVER (CLAVE)
+// 404 handler
 // =====================
-const PORT = process.env.PORT; // 🚨 NO valor por defecto
+app.use((req, res) => {
+  res.status(404).json({ message: "Ruta no encontrada" });
+});
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`✅ Backend corriendo en puerto ${PORT}`);
+// =====================
+// Error handler
+// =====================
+app.use((err, req, res, next) => {
+  console.error("❌ Error:", err?.message || err);
+  res.status(500).json({ message: "Error interno del servidor" });
+});
+
+// =====================
+// Listen (IMPORTANTE en Railway)
+// =====================
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`✅ API corriendo en puerto ${PORT}`);
 });
