@@ -1,40 +1,41 @@
-// src/backend/index.js
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const dotenv = require("dotenv");
 
-const authRoutes = require("./routes/authRoutes");
-const serviciosRoutes = require("./routes/serviciosRoutes");
-const materialRoutes = require("./routes/materialRoutes");
-const comentariosRoutes = require("./routes/comentariosRoutes");
+dotenv.config();
 
 const app = express();
 
 /* =====================
-   CORS (CLAVE)
+   CORS (CRÍTICO)
 ===================== */
-const allowedOrigins = [
-  "http://localhost:5173",
-  process.env.FRONTEND_URL, // https://software-six-weld.vercel.app
-];
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Permitir llamadas sin origin (Postman, curl, healthchecks)
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) {
+
+      if (origin === FRONTEND_URL) {
         return callback(null, true);
       }
-      return callback(new Error("CORS bloqueado: " + origin));
+
+      console.error("❌ CORS bloqueado:", origin);
+      return callback(new Error("CORS no permitido"));
     },
     credentials: true,
   })
 );
 
+/* =====================
+   PARSERS
+===================== */
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 /* =====================
-   HEALTH CHECK
+   HEALTHCHECK
 ===================== */
 app.get("/", (req, res) => {
   res.json({ message: "API AnNutrition funcionando" });
@@ -43,15 +44,24 @@ app.get("/", (req, res) => {
 /* =====================
    ROUTES
 ===================== */
-app.use("/api/auth", authRoutes);
-app.use("/api/servicios", serviciosRoutes);
-app.use("/api/material", materialRoutes);
-app.use("/api/comentarios", comentariosRoutes);
+app.use("/api/auth", require("./routes/authRoutes"));
+app.use("/api/material", require("./routes/materialRoutes"));
+app.use("/api/servicios", require("./routes/serviciosRoutes"));
+app.use("/api/comentarios", require("./routes/comentariosRoutes"));
+
+/* =====================
+   ERROR HANDLER (OBLIGATORIO)
+===================== */
+app.use((err, req, res, next) => {
+  console.error("🔥 ERROR GLOBAL:", err.message);
+  res.status(500).json({ message: "Error interno del servidor" });
+});
 
 /* =====================
    SERVER
 ===================== */
 const PORT = process.env.PORT || 4000;
+
 app.listen(PORT, () => {
   console.log(`🚀 Backend corriendo en puerto ${PORT}`);
 });
